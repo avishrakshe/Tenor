@@ -29,3 +29,5 @@ Thumbs.db
 .sandbox/
 deployments/sandbox.json
 submission-draft.md
+.vercel
+.env*
