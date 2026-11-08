@@ -3,6 +3,7 @@
 import { MARKETS, bid, ask, market, evaluate, fillBuy, markValue, type Ruleset } from '@tenor/rules';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { useLiveTick } from '@/lib/live';
 import { priceUsd, readQuotes, usd, type LiveQuote, type Position } from '@/lib/chain';
 import { CandleChart } from './Charts';
 import { useSession } from './Session';
@@ -107,7 +108,11 @@ export function TradeTerminal({
 
   const quotesPoll = usePoll(() => (config.deployed ? readQuotes(config.rpc, config.stack.oracle) : Promise.resolve(null)), [config.deployed, config.stack.oracle], 4000);
   const quotes = quotesPoll.data;
-  const mkt = usePoll<Market>(() => fetch(`/api/market?symbol=${symbol}`).then((r) => r.json()), [symbol], 15_000).data;
+  const polled = usePoll<Market>(() => fetch(`/api/market?symbol=${symbol}`).then((r) => r.json()), [symbol], 60_000).data;
+  const tick = useLiveTick(symbol);
+  const mkt: Market | null = tick
+    ? { last: tick.price, changePct: ((tick.price - tick.open24) / tick.open24) * 100, volumeUsd: tick.volume24 * tick.price }
+    : polled;
   const q = quotes?.[symbol] ?? null;
 
   const equity = useMemo(() => {

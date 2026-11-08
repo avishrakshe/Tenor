@@ -2,6 +2,7 @@
 
 import { motion } from 'motion/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { subscribeTicks, useFeedStatus, useLiveTick, type FeedStatus } from '@/lib/live';
 
 type Candle = { time: number; open: number; high: number; low: number; close: number; volume: number };
 
@@ -9,13 +10,20 @@ const usdFmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', cur
 
 const INTERVALS = ['1m', '5m', '15m', '1h', '6h', '1d'];
 
-/** Live candles with the onchain oracle price drawn across them. */
+const SECONDS: Record<string, number> = { '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '6h': 21600, '1d': 86400 };
+/** Corrects the live candles against the exchange's own history. */
+const RESYNC_MS = 60_000;
+
+/** Live candles, moved by every trade, with the onchain oracle price drawn across them. */
 export function CandleChart({ symbol, oraclePrice }: { symbol: string; oraclePrice: number | null }) {
   const host = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const api = useRef<{ chart: any; candles: any; volume: any; line: any } | null>(null);
+  const last = useRef<Candle | null>(null);
+  const [ready, setReady] = useState(false);
   const [interval, setIntervalName] = useState('5m');
   const [error, setError] = useState<string | null>(null);
+  const feed = useFeedStatus();
 
   useEffect(() => {
     let dead = false;
@@ -38,47 +46,73 @@ export function CandleChart({ symbol, oraclePrice }: { symbol: string; oraclePri
       chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.86, bottom: 0 } });
       api.current = { chart, candles, volume, line: null };
       cleanup = () => chart.remove();
-      setError(null);
+      setReady(true);
     })();
     return () => {
       dead = true;
       cleanup();
       api.current = null;
+      setReady(false);
     };
   }, []);
 
   useEffect(() => {
+    if (!ready) return;
     let alive = true;
+    last.current = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const t = (x: number) => x as any;
+    const volumeBar = (c: Candle) => ({ time: t(c.time), value: c.volume, color: c.close >= c.open ? '#1d4a3a' : '#552a2a' });
+    const draw = (c: Candle) => {
+      api.current?.candles.update({ ...c, time: t(c.time) });
+      api.current?.volume.update(volumeBar(c));
+    };
     const load = async () => {
       try {
         const r = await fetch(`/api/candles?symbol=${symbol}&interval=${interval}`);
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const rows: Candle[] = await r.json();
-        if (!alive || !api.current) return;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const t = (x: number) => x as any;
+        if (!alive || !api.current || rows.length === 0) return;
         api.current.candles.setData(rows.map((c) => ({ ...c, time: t(c.time) })));
-        api.current.volume.setData(rows.map((c) => ({ time: t(c.time), value: c.volume, color: c.close >= c.open ? '#1d4a3a' : '#552a2a' })));
+        api.current.volume.setData(rows.map(volumeBar));
+        // Trades already drawn may be newer than the exchange's history response.
+        const newest = rows[rows.length - 1];
+        const held = last.current;
+        if (held && held.time >= newest.time) draw(held);
+        else last.current = newest;
         setError(null);
       } catch (e) {
         if (alive) setError(e instanceof Error ? e.message : String(e));
       }
     };
-    const first = setTimeout(load, 150);
-    const id = setInterval(load, 15_000);
+    load();
+    const id = setInterval(load, RESYNC_MS);
+    const seconds = SECONDS[interval];
+    const off = subscribeTicks(symbol, (tick) => {
+      const held = last.current;
+      if (!held) return;
+      const bucket = Math.floor(tick.time / seconds) * seconds;
+      if (bucket < held.time) return;
+      const next: Candle =
+        bucket > held.time
+          ? { time: bucket, open: held.close, high: Math.max(held.close, tick.price), low: Math.min(held.close, tick.price), close: tick.price, volume: tick.size }
+          : { ...held, high: Math.max(held.high, tick.price), low: Math.min(held.low, tick.price), close: tick.price, volume: held.volume + tick.size };
+      last.current = next;
+      draw(next);
+    });
     return () => {
       alive = false;
-      clearTimeout(first);
       clearInterval(id);
+      off();
     };
-  }, [symbol, interval]);
+  }, [ready, symbol, interval]);
 
   useEffect(() => {
     const a = api.current;
     if (!a) return;
     if (a.line) a.candles.removePriceLine(a.line);
     a.line = oraclePrice ? a.candles.createPriceLine({ price: oraclePrice, color: '#e6b450', lineWidth: 1, lineStyle: 2, title: 'Oracle' }) : null;
-  }, [oraclePrice]);
+  }, [oraclePrice, ready]);
 
   return (
     <div className="flex h-full min-h-[380px] flex-col">
@@ -93,18 +127,38 @@ export function CandleChart({ symbol, oraclePrice }: { symbol: string; oraclePri
             {i}
           </button>
         ))}
-        <span className="label ml-auto">{symbol}-USD · Coinbase</span>
+        <span className="label ml-auto flex items-center gap-2">
+          <LiveDot status={feed} />
+          {symbol}-USD · Coinbase
+        </span>
       </div>
       {error && <p className="px-3 py-2 text-xs text-down">Market data unavailable: {error}</p>}
-      <div ref={host} className="min-h-0 flex-1" role="img" aria-label={`${symbol} candlestick chart`} />
+      <div ref={host} className="min-h-0 flex-1" role="img" aria-label={`${symbol} candlestick chart, updating live`} />
     </div>
   );
 }
 
-/** One series, drawn on when it scrolls into view, with a hover readout. */
+export function LiveDot({ status }: { status: FeedStatus }) {
+  const text = status === 'live' ? 'Live' : status === 'connecting' ? 'Connecting' : 'Reconnecting';
+  return (
+    <span className="inline-flex items-center gap-1.5" role="status">
+      <span className={`h-1.5 w-1.5 rounded-full ${status === 'live' ? 'animate-pulse bg-up' : 'bg-warn'}`} aria-hidden="true" />
+      {text}
+    </span>
+  );
+}
+
+/** One series, drawn on when it scrolls into view, with a hover readout. Today's point is live. */
 export function PriceArea({ symbol, days = 90 }: { symbol: string; days?: number }) {
-  const [rows, setRows] = useState<Candle[]>([]);
+  const [history, setRows] = useState<Candle[]>([]);
   const [hover, setHover] = useState<number | null>(null);
+  const tick = useLiveTick(symbol, 1000);
+  const feed = useFeedStatus();
+  const rows = useMemo(() => {
+    if (!tick || history.length === 0) return history;
+    const today = { ...history[history.length - 1], close: tick.price };
+    return [...history.slice(0, -1), today];
+  }, [history, tick]);
   const [error, setError] = useState(false);
 
   useEffect(() => {
@@ -139,7 +193,7 @@ export function PriceArea({ symbol, days = 90 }: { symbol: string; days?: number
     <div>
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <div className="label">{symbol}/USD daily close · last {days} days</div>
+          <div className="label flex items-center gap-2">{symbol}/USD · last {days} days <LiveDot status={feed} /></div>
           <div className="num mt-1 text-2xl">{usdFmt(point.close)}</div>
         </div>
         <div className="num text-right text-xs text-mute">

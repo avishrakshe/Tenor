@@ -13,7 +13,7 @@ export async function GET(req: Request) {
   if (!SYMBOLS.has(symbol) || !granularity) return NextResponse.json({ message: 'Unknown symbol or interval' }, { status: 400 });
   const r = await fetch(`https://api.exchange.coinbase.com/products/${symbol}-USD/candles?granularity=${granularity}`, {
     headers: { 'user-agent': 'tenor' },
-    next: { revalidate: 20 },
+    next: { revalidate: 5 },
   });
   if (!r.ok) return NextResponse.json({ message: `Candles: HTTP ${r.status}` }, { status: 502 });
   const rows = (await r.json()) as number[][];

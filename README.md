@@ -207,7 +207,7 @@ trader can't route capital through a pool they control at a bad price.
 - Spot, long or flat only. BTC, ETH, SOL and NEAR on testnet.
 - On mainnet, Rhea only has deep USDC liquidity for NEAR (pool 4512), so real swaps would be NEAR only.
 - With a 60-second price limit, a trader can act on information newer than the oracle. The spread and fee reduce this but don't remove it.
-- Candle charts show public Coinbase market data for context. Fills use the onchain oracle, so there is no order book, and the two prices can differ slightly.
+- Candle charts stream live trades from Coinbase's public feed, for context. Fills use the onchain oracle, so there is no order book, and the two prices can differ slightly.
 - Checkout from another chain is a dry-run quote only. Card payment, email login and coupons don't exist.
 - Breach records link to the account and block rather than the exact transaction.
 - Trade history lists transactions from a public indexer. An order that reached the contract and was rejected there still shows as confirmed.
