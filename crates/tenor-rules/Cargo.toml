@@ -1,0 +1,11 @@
+[package]
+name = "tenor-rules"
+description = "Pure prop-firm rules, fees and fill math shared by the Tenor and Guard contracts. No near-sdk dependency."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+serde_json = "1"
