@@ -1,0 +1,20 @@
+[package]
+name = "tenor"
+description = "Tenor main contract: catalog, onchain evaluations, risk reserve and Guard factory."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[package.metadata.near.reproducible_build]
+image = "sourcescan/cargo-near:0.19.1-rust-1.91.1"
+container_build_command = ["cargo", "near", "build", "non-reproducible-wasm", "--locked"]
+
+[dependencies]
+near-sdk = { workspace = true, features = ["global-contracts"] }
+tenor-rules.workspace = true
+
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing", "global-contracts"] }

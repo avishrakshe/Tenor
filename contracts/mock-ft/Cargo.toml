@@ -1,0 +1,17 @@
+[package]
+name = "mock-ft"
+description = "Testnet NEP-141 with an open faucet mint. One instance per asset (USDC, BTC, ETH, SOL, NEAR)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[package.metadata.near.reproducible_build]
+image = "sourcescan/cargo-near:0.19.1-rust-1.91.1"
+container_build_command = ["cargo", "near", "build", "non-reproducible-wasm", "--locked"]
+
+[dependencies]
+near-sdk.workspace = true
+near-contract-standards.workspace = true
