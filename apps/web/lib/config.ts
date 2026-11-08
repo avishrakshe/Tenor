@@ -10,6 +10,7 @@ export type AppConfig = {
   explorer: string | null;
   deployed: boolean;
   usdc: string;
+  blocklist: string;
   tokens: Record<string, string>;
   stack: Stack;
 };
@@ -25,8 +26,8 @@ export function getConfig(): AppConfig {
   try {
     const raw = readFileSync(join(process.cwd(), '..', '..', 'deployments', `${network}.json`), 'utf8');
     const dep = JSON.parse(raw);
-    return { ...base, deployed: true, usdc: dep.usdc, tokens: dep.tokens, stack: dep[stackName] };
+    return { ...base, deployed: true, usdc: dep.usdc, blocklist: dep.blocklist ?? '', tokens: dep.tokens, stack: dep[stackName] };
   } catch {
-    return { ...base, deployed: false, usdc: '', tokens: {}, stack: { tenor: '', oracle: '', swap: '' } };
+    return { ...base, deployed: false, usdc: '', blocklist: '', tokens: {}, stack: { tenor: '', oracle: '', swap: '' } };
   }
 }

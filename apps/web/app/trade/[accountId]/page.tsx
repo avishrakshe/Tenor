@@ -69,6 +69,7 @@ export default function Trade({ params }: { params: Promise<{ accountId: string 
         rules: ruleset(p.plan, p.twoStep),
       }}
       canTrade={owner && c.status === 'Active'}
+      history={{ account: c.owner, receiver: tenor }}
       busy={busy}
       message={msg}
       onBuy={(symbol, usdc, tp, sl) =>

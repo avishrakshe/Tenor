@@ -9,6 +9,15 @@ const PX: i64 = 100 * 100_000_000;
 const ME: &str = "1.tenor.near";
 const CAPITAL: u128 = 10_000 * USD;
 
+fn wallet(who: &str) {
+    testing_env!(VMContextBuilder::new()
+        .current_account_id(ME.parse().unwrap())
+        .predecessor_account_id(who.parse().unwrap())
+        .block_timestamp(T0 * 1_000_000_000)
+        .attached_deposit(NearToken::from_yoctonear(1))
+        .build());
+}
+
 fn ctx(who: &str) {
     testing_env!(VMContextBuilder::new()
         .current_account_id(ME.parse().unwrap())
@@ -138,6 +147,57 @@ fn only_the_trader_key_can_request_payout() {
 }
 
 #[test]
+#[should_panic(expected = "Recipient is not approved")]
+fn agent_key_cannot_pay_a_stranger() {
+    let mut g = guard();
+    g.cash = CAPITAL + 1_000 * USD;
+    ctx(ME);
+    let _ = g.request_payout("attacker.near".parse().unwrap());
+}
+
+#[test]
+#[should_panic(expected = "Only the trader's own wallet")]
+fn agent_key_cannot_approve_a_recipient() {
+    let mut g = guard();
+    wallet(ME);
+    g.approve_payout_recipient("attacker.near".parse().unwrap());
+}
+
+#[test]
+#[should_panic(expected = "Requires attached deposit of exactly 1 yoctoNEAR")]
+fn approval_needs_a_full_wallet_signature() {
+    let mut g = guard();
+    ctx("trader.near");
+    g.approve_payout_recipient("friend.near".parse().unwrap());
+}
+
+#[test]
+fn approved_recipient_can_be_paid_until_revoked() {
+    let mut g = guard();
+    wallet("trader.near");
+    g.approve_payout_recipient("friend.near".parse().unwrap());
+    assert_eq!(g.get_state().approved_recipients.len(), 1);
+    g.cash = CAPITAL + 1_000 * USD;
+    g.day_start_equity = g.cash;
+    ctx(ME);
+    let _ = g.request_payout("friend.near".parse().unwrap());
+    assert_eq!(g.get_state().paid_to_trader.0, 800 * USD);
+    wallet("trader.near");
+    g.revoke_payout_recipient("friend.near".parse().unwrap());
+    assert!(g.get_state().approved_recipients.is_empty());
+}
+
+#[test]
+#[should_panic(expected = "Too many approved recipients")]
+fn approved_list_is_capped() {
+    let mut g = guard();
+    wallet("trader.near");
+    for i in 0..9 {
+        g.approve_payout_recipient(format!("r{i}.near").parse().unwrap());
+    }
+}
+
+#[test]
 #[should_panic(expected = "Account is not active")]
 fn pending_accounts_cannot_trade() {
     ctx("tenor.near");
@@ -202,7 +262,7 @@ fn payout_splits_80_20_and_protects_the_daily_baseline() {
     g.cash = CAPITAL + 1_000 * USD;
     g.day_start_equity = g.cash;
     ctx(ME);
-    let _ = g.request_payout("anyone.near".parse().unwrap());
+    let _ = g.request_payout("trader.near".parse().unwrap());
     let s = g.get_state();
     assert_eq!(s.paid_to_trader.0, 800 * USD);
     assert_eq!(s.paid_to_firm.0, 200 * USD);
@@ -216,7 +276,7 @@ fn payout_cannot_outrun_an_unpoked_breach() {
     g.cash = CAPITAL + 500 * USD;
     g.day_start_equity = CAPITAL + 1_000 * USD; // Down 500 today: past the 300 daily limit.
     ctx(ME);
-    let _ = g.request_payout("anyone.near".parse().unwrap());
+    let _ = g.request_payout("trader.near".parse().unwrap());
     let s = g.get_state();
     assert_eq!(s.status, GuardStatus::Settled);
     assert_eq!(s.breach_reason.as_deref(), Some("daily_loss"));
@@ -229,7 +289,7 @@ fn failed_trader_leg_restores_only_its_share() {
     g.cash = CAPITAL + 1_000 * USD;
     g.day_start_equity = g.cash;
     ctx(ME);
-    let _ = g.request_payout("anyone.near".parse().unwrap());
+    let _ = g.request_payout("trader.near".parse().unwrap());
     let _ = g.on_trader_paid(U128(800 * USD), U128(200 * USD), false, Err(PromiseError::Failed));
     assert_eq!(g.get_state().cash.0, CAPITAL + 800 * USD);
     assert_eq!(g.get_state().paid_to_trader.0, 0);

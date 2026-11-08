@@ -2298,6 +2298,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "tenor-blocklist"
+version = "0.1.0"
+dependencies = [
+ "near-sdk",
+]
+
+[[package]]
 name = "tenor-guard"
 version = "0.1.0"
 dependencies = [

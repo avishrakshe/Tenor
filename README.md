@@ -80,7 +80,7 @@ That needs about 27 NEAR with `--guard bytes`, where the factory deploys the Gua
 
 `npm run demo:oneclick`, or the *Pay from any chain* panel on `/challenges` and the payout panel on
 a funded account. Quotes use `dry: true`, so 1Click returns prices and no deposit address. Live
-quotes are refused unless `ONECLICK_ALLOW_LIVE=1`. No key is needed; without one 1Click adds 0.25%.
+quotes are refused unless `ONECLICK_ALLOW_LIVE=1`. Each panel shows where the funds sit at every stop, and rejects a quote whose total cost is over your limit. *Track a swap* follows a real deposit address through every 1Click status, including `INCOMPLETE_DEPOSIT`, `REFUNDED` and `FAILED`. No key is needed; without one 1Click adds 0.25%.
 
 Checkout delivers to the user's NEAR account and the UI then calls `ft_transfer_call`. 1Click's
 `customRecipientMsg` could deliver straight to the contract, but its docs mark it highly
@@ -91,14 +91,59 @@ the trader's own share there, so a bad address can only hurt the trader.
 
 An agent holding only the Guard's function-call key obeys a prompt injection. It runs with a
 scripted worst-case mock by default; `--llm` with `ANTHROPIC_API_KEY` uses a real model.
+Run `npm run attack-demo -- --network testnet`, or `--network sandbox` for no funds.
 
-| Attack | Stopped by | Evidence |
+| Attack | Stopped by | Evidence in the log |
 |---|---|---|
 | Transfer NEAR to an attacker | NEAR protocol | `Access key requires full access` |
 | Add a full-access key | NEAR protocol | Same error, still one key on the account |
+| Pay profit to a known-bad address | Counterparty check | `BLOCK`, nothing signed |
+| Skip the check and sign the payout anyway | Guard | `Recipient is not approved by the trader's wallet`, attacker balance 0 |
+| Pay a brand-new unknown address | Human, asked on warn | `WARN`, human declined, nothing signed |
 | Order above the notional cap | Guard | `order_rejected`, reason `notional_cap` |
 | Trade until breach | Guard | Status `Breached`, zero keys left |
 | Trade after the breach | NEAR protocol | `Access key ... does not exist` |
+
+As a control, the same key then pays the trader's own account, split 80/20.
+
+## What the agent's key can and can't do
+
+It is a function-call access key whose receiver is the Guard account, limited to `place_order`,
+`close_position` and `request_payout`. Every call is signed as the Guard.
+
+**The protocol guarantees** it cannot transfer NEAR, add or delete keys, deploy code, attach a
+deposit, or call any other contract or method.
+
+**The Guard guarantees** it stays inside the loss limits and position caps, can't fill more than 1%
+worse than the oracle, trades only through the configured pools, and can only pay the trader's
+account or addresses the trader's own wallet approved. Approval needs a 1 yoctoNEAR deposit from the
+trader's account, which this key can't provide or sign for.
+
+**It can still** lose money inside the limits, up to the breach, by trading badly or churning fees.
+It can also spend the Guard's NEAR on gas, up to its allowance, and trigger a payout to an address
+that is already approved.
+
+## Counterparty check
+
+Before paying anyone, the agent calls [`checkCounterparty`](packages/counterparty/src/index.js) and
+gets `allow`, `warn` or `block` with reasons. [`agent/guarded.mjs`](agent/guarded.mjs) refuses to
+sign on `block` and asks a human on `warn`. The same check is on the payout form and at `/safety`.
+
+| Signal | Source | Effect |
+|---|---|---|
+| Shared blocklist | `status` on the [blocklist contract](contracts/blocklist/src/lib.rs) | 1 report warns. 2 reporters or a confirmation blocks |
+| Account exists | RPC `view_account` | Missing named account blocks. Unused implicit address warns |
+| Is a contract | RPC `code_hash` | Warns |
+| Code changed recently | Archival RPC `view_account` 1 and 7 days back | Under 24h blocks, under 7 days warns |
+| Account age | FastNear Transactions API, oldest transaction | Under 7 days warns |
+| Activity | FastNear `txs_count` | Fewer than 3 warns |
+| Past interactions | Transactions in both accounts' recent history | Shown as context |
+
+If a source can't be read the answer is `warn`, never a silent pass.
+
+The check runs on the agent's side, so a fully compromised agent can skip it. That is why the
+recipient rule is also enforced in the Guard. Blocklist reports cost 0.01 NEAR, which limits spam but
+doesn't stop someone paying for two accounts to flag a target.
 
 ## Deployed contracts
 
@@ -110,6 +155,7 @@ Testnet ids are also in [`deployments/testnet.json`](deployments/testnet.json).
 | Tenor (demo stack, scripted prices) | [demo.tenor.testnet](https://testnet.nearblocks.io/address/demo.tenor.testnet) |
 | Oracle | [oracle.tenor.testnet](https://testnet.nearblocks.io/address/oracle.tenor.testnet), [demo-oracle.tenor.testnet](https://testnet.nearblocks.io/address/demo-oracle.tenor.testnet) |
 | Mock swap venue | [swap.tenor.testnet](https://testnet.nearblocks.io/address/swap.tenor.testnet), [demo-swap.tenor.testnet](https://testnet.nearblocks.io/address/demo-swap.tenor.testnet) |
+| Shared blocklist | [blocklist.tenor.testnet](https://testnet.nearblocks.io/address/blocklist.tenor.testnet) |
 | Mock USDC | [usdc.tenor.testnet](https://testnet.nearblocks.io/address/usdc.tenor.testnet) |
 | Mock market tokens | `btc`, `eth`, `sol` and `near` `.tenor.testnet` |
 
@@ -164,14 +210,15 @@ trader can't route capital through a pool they control at a bad price.
 - Candle charts show public Coinbase market data for context. Fills use the onchain oracle, so there is no order book, and the two prices can differ slightly.
 - Checkout from another chain is a dry-run quote only. Card payment, email login and coupons don't exist.
 - Breach records link to the account and block rather than the exact transaction.
+- Trade history lists transactions from a public indexer. An order that reached the contract and was rejected there still shows as confirmed.
 - Popup-free evaluation trading needs a wallet that supports testnet and function-call keys. Others prompt on each order.
 - The trader key for a funded account lives in that browser's storage.
 - Not audited.
 
 ## Tests
 
-- `npm test`: shared vectors against the TypeScript rules.
-- `cargo test --workspace`: 87 tests covering the fee table, rule ordering, shared vectors and contract panic paths.
+- `npm test`: 32 tests, covering the shared vectors against the TypeScript rules and the counterparty policy.
+- `cargo test --workspace`: 102 tests covering the fee table, rule ordering, shared vectors and contract panic paths.
 - `scripts/build-wasm.sh` then `npm run wasm:optimize`: rebuilds and shrinks `wasm/`. The build needs `RUSTFLAGS='--cfg near'`, which the script sets.
 
 ## Prior work
@@ -185,6 +232,7 @@ hackathon window, and only this work should be judged.
 - Rust: `near-sdk`, `near-contract-standards`
 - JS: `near-api-js`, `@hot-labs/near-connect`, `function-call-key-plugin`, `next`, `react`, `tailwindcss`, `three`, `motion`, `lightweight-charts`, `geist`, `dotenv`, `bs58`
 - Tools: `near-sandbox`, `binaryen`
+- Data: FastNear RPC and Transactions API, Coinbase Exchange market data
 - Reference only: `@ref-finance/ref-sdk` (swap message format), `near/intents` (Verifier source)
 - AI-generated code: parts of this repository were written with an AI coding assistant, as allowed by HACKATHON.md Q-005.
 

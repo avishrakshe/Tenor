@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 RUSTFLAGS='--cfg near -C link-arg=-s' cargo build --release --target wasm32-unknown-unknown \
-  -p mock-ft -p tenor-oracle -p mock-swap -p tenor-guard -p tenor
+  -p mock-ft -p tenor-blocklist -p tenor-oracle -p mock-swap -p tenor-guard -p tenor
 mkdir -p wasm
 cp "${CARGO_TARGET_DIR:-target}"/wasm32-unknown-unknown/release/*.wasm wasm/
 ls -l wasm

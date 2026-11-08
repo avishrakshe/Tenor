@@ -13,6 +13,7 @@ const APP_LINKS = [
   ['/analytics', 'Analytics'],
   ['/leaderboard', 'Leaderboard'],
   ['/transparency', 'Transparency'],
+  ['/safety', 'Safety'],
 ];
 
 function Account() {

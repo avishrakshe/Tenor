@@ -1,0 +1,25 @@
+export type Level = 'info' | 'warn' | 'block';
+export type Verdict = 'allow' | 'warn' | 'block';
+export type Reason = { level: Level; text: string };
+export type Network = { rpc: string; archivalRpc: string | null; txApi: string | null };
+export type Report = { reporter: string; evidence: string; reported_at: string };
+export type BlocklistStatus = { account: string; reports: number; confirmed: boolean; blocked: boolean; evidence: Report[] };
+export type Signals = {
+  receiver: string;
+  implicit: boolean;
+  blocklist?: BlocklistStatus;
+  exists?: boolean;
+  isContract?: boolean;
+  codeChanged1d?: boolean;
+  codeChanged7d?: boolean;
+  txCount?: number;
+  ageDays?: number;
+  priorInteractions?: number;
+};
+export type Result = { verdict: Verdict; reasons: Reason[]; signals: Signals };
+export type Query = { blocklist?: string; actor?: string; receiver: string; trusted?: string[] };
+export const NETWORKS: Record<'testnet' | 'mainnet' | 'sandbox', Network>;
+export function isImplicit(id: string): boolean;
+export function gatherSignals(net: Network, q: Query): Promise<Signals>;
+export function score(s: Signals, opts?: { trusted?: string[] }): Result;
+export function checkCounterparty(net: Network, q: Query): Promise<Result>;

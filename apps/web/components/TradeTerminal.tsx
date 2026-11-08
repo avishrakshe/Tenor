@@ -81,6 +81,7 @@ export function TradeTerminal({
   onClose,
   actions,
   children,
+  history,
 }: {
   account: TerminalAccount | null;
   canTrade: boolean;
@@ -91,6 +92,8 @@ export function TradeTerminal({
   onClose: (symbol: string | null) => void;
   actions?: React.ReactNode;
   children?: React.ReactNode;
+  /** Whose signed transactions to list, and which contract they called. */
+  history?: { account: string; receiver: string };
 }) {
   const { config } = useSession();
   const [symbol, setSymbol] = useState('BTC');
@@ -100,6 +103,7 @@ export function TradeTerminal({
   const [tpsl, setTpsl] = useState(false);
   const [tp, setTp] = useState('');
   const [sl, setSl] = useState('');
+  const [tab, setTab] = useState<'positions' | 'history'>('positions');
 
   const quotesPoll = usePoll(() => (config.deployed ? readQuotes(config.rpc, config.stack.oracle) : Promise.resolve(null)), [config.deployed, config.stack.oracle], 4000);
   const quotes = quotesPoll.data;
@@ -267,10 +271,18 @@ export function TradeTerminal({
 
         <section className="panel !p-0 overflow-x-auto xl:col-span-2" aria-label="Positions">
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
-            <h2 className="text-sm font-semibold">Positions</h2>
-            {account && account.positions.length > 0 && <button className="text-sm text-mute underline underline-offset-2 hover:text-text" disabled={!canTrade || busy} onClick={() => onClose(null)}>Close next</button>}
+            <div className="flex gap-4" role="tablist" aria-label="Account activity">
+              {(['positions', 'history'] as const).map((t) => (
+                <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={`text-sm capitalize ${tab === t ? 'font-semibold text-text' : 'text-mute hover:text-text'}`}>
+                  {t}
+                </button>
+              ))}
+            </div>
+            {tab === 'positions' && account && account.positions.length > 0 && <button className="text-sm text-mute underline underline-offset-2 hover:text-text" disabled={!canTrade || busy} onClick={() => onClose(null)}>Close next</button>}
           </div>
-          {!account || account.positions.length === 0 ? (
+          {tab === 'history' ? (
+            <History history={history} explorer={config.explorer} />
+          ) : !account || account.positions.length === 0 ? (
             <p className="p-10 text-center text-sm text-mute">No positions found</p>
           ) : (
             <table className="w-full min-w-[820px] text-sm">
@@ -327,6 +339,44 @@ function MiniMeter({ label, bps, tone, caption }: { label: string; bps: bigint; 
         <div className={`h-1.5 rounded-sm ${tone}`} style={{ width: `${Number(bps) / 100}%` }} />
       </div>
     </div>
+  );
+}
+
+type HistoryRow = { hash: string; time: number; method: string; symbol: string | null; usdc: string | null; ok: boolean };
+
+const ACTION_NAMES: Record<string, string> = { place_order: 'Buy', close_position: 'Close', request_payout: 'Payout', fund: 'Fund' };
+
+function History({ history, explorer }: { history?: { account: string; receiver: string }; explorer: string | null }) {
+  const data = usePoll<{ rows: HistoryRow[]; unavailable?: boolean } | null>(
+    () => (history ? fetch(`/api/history?account=${encodeURIComponent(history.account)}&receiver=${encodeURIComponent(history.receiver)}`).then((r) => r.json()) : Promise.resolve(null)),
+    [history?.account, history?.receiver],
+    15_000,
+  );
+  if (!history) return <p className="p-10 text-center text-sm text-mute">Open an account to see its history.</p>;
+  if (data.error) return <p className="p-6 text-sm text-down">{data.error}</p>;
+  if (data.data?.unavailable) return <p className="p-10 text-center text-sm text-mute">History needs the public testnet indexer, so it isn't available on a local sandbox.</p>;
+  const rows = data.data?.rows ?? [];
+  if (rows.length === 0) return <p className="p-10 text-center text-sm text-mute">No transactions yet. New ones can take a moment to appear.</p>;
+  return (
+    <table className="w-full min-w-[620px] text-sm">
+      <thead>
+        <tr className="text-left text-mute">
+          {['Time (UTC)', 'Action', 'Market', 'Amount', 'Result', 'Transaction'].map((h) => <th key={h} className="px-4 py-2 font-normal">{h}</th>)}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.hash} className="num border-t border-line">
+            <td className="px-4 py-2">{new Date(r.time * 1000).toISOString().slice(5, 19).replace('T', ' ')}</td>
+            <td className="px-4 py-2">{ACTION_NAMES[r.method] ?? r.method}</td>
+            <td className="px-4 py-2">{r.symbol ?? '—'}</td>
+            <td className="px-4 py-2">{r.usdc ? usd(r.usdc) : '—'}</td>
+            <td className={`px-4 py-2 ${r.ok ? 'text-up' : 'text-down'}`}>{r.ok ? 'Confirmed' : 'Failed'}</td>
+            <td className="px-4 py-2">{explorer ? <a className="underline underline-offset-2" href={`${explorer}/txns/${r.hash}`}>{r.hash.slice(0, 8)}…</a> : `${r.hash.slice(0, 8)}…`}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 

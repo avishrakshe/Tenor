@@ -1,6 +1,7 @@
 'use client';
 
 import { use, useEffect, useState } from 'react';
+import { useCounterparty, Verdict } from '@/components/CounterpartyBadge';
 import { PayoutQuote } from '@/components/OneClick';
 import { sendWithKey, useSession, type Call } from '@/components/Session';
 import { TradeTerminal } from '@/components/TradeTerminal';
@@ -18,12 +19,14 @@ function storedKey(challengeId: number | null): string | null {
 
 export default function FundedPage({ params }: { params: Promise<{ accountId: string }> }) {
   const { accountId: guard } = use(params);
-  const { config } = useSession();
+  const { config, accountId, send } = useSession();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: 'info' | 'error'; text: string } | null>(null);
   const [recipient, setRecipient] = useState('');
   const [traderKey, setTraderKey] = useState<string | null>(null);
 
+  const [walletBusy, setWalletBusy] = useState(false);
+  const check = useCounterparty(recipient, accountId ?? undefined);
   const state = usePoll(() => view<GuardState>(config.rpc, guard, 'get_state'), [guard], 4000);
   const keys = usePoll(() => accessKeys(config.rpc, guard), [guard], 4000);
   const record = usePoll(
@@ -44,6 +47,22 @@ export default function FundedPage({ params }: { params: Promise<{ accountId: st
   const profit = BigInt(s.cash) > BigInt(s.initial_balance) ? BigInt(s.cash) - BigInt(s.initial_balance) : 0n;
   const traderShare = (profit * 8n) / 10n;
   const canTrade = Boolean(traderKey) && active;
+
+  const target = recipient.trim();
+  const allowed = target === s.trader || (s.approved_recipients ?? []).includes(target);
+
+  async function walletCall(ok: string, method: string, who: string) {
+    setWalletBusy(true);
+    setMsg(null);
+    try {
+      const r = (await send({ receiverId: guard, method, args: { recipient: who }, deposit: '1', gas: '30000000000000' })) as { status?: { Failure?: unknown } };
+      setMsg(r?.status?.Failure ? { tone: 'error', text: JSON.stringify(r.status.Failure).slice(0, 200) } : { tone: 'info', text: ok });
+    } catch (e) {
+      setMsg({ tone: 'error', text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setWalletBusy(false);
+    }
+  }
 
   async function trade(ok: string, call: Omit<Call, 'receiverId'>) {
     if (!traderKey) return;
@@ -73,6 +92,7 @@ export default function FundedPage({ params }: { params: Promise<{ accountId: st
         rules: { phaseOneTargetBps: 0n, phaseTwoTargetBps: null, maxDrawdownBps: BigInt(s.max_drawdown_bps), dailyLossBps: BigInt(s.daily_loss_bps) },
       }}
       canTrade={canTrade}
+      history={{ account: guard, receiver: guard }}
       busy={busy}
       message={msg ?? (!traderKey && active ? { tone: 'info', text: 'This browser does not hold the trader key for this account, so it is read-only here.' } : null)}
       onBuy={(symbol, usdc, tp, sl) => trade('Swap executed. The book is rebuilt from token balances.', { method: 'place_order', args: { symbol, usdc, tp_e8: tp, sl_e8: sl } })}
@@ -103,9 +123,34 @@ export default function FundedPage({ params }: { params: Promise<{ accountId: st
               <label className="label" htmlFor="recipient">NEAR recipient or 1Click deposit address</label>
               <input id="recipient" className="field num" value={recipient} onChange={(e) => setRecipient(e.target.value)} />
             </div>
-            <button className="btn w-full" disabled={!canTrade || busy || profit === 0n || s.positions.length > 0 || !recipient} onClick={() => trade('Payout sent.', { method: 'request_payout', args: { recipient } })}>
-              Request payout
+            {check.loading && <Notice>Checking this address…</Notice>}
+            {check.error && <Notice tone="error">{check.error}</Notice>}
+            {check.result && <Verdict result={check.result} />}
+            {recipient && !allowed && (
+              <div className="space-y-2 rounded-lg border border-line p-3">
+                <p className="text-sm text-mute">Payouts only go to your own account or an address your wallet approved, so an agent holding the trade key can't redirect them.</p>
+                {accountId === s.trader ? (
+                  <button className="btn btn-ghost w-full" disabled={walletBusy || check.result?.verdict === 'block'} onClick={() => walletCall('Address approved.', 'approve_payout_recipient', recipient)}>
+                    Approve this address in my wallet
+                  </button>
+                ) : (
+                  <Notice>Log in with {s.trader} to approve it.</Notice>
+                )}
+              </div>
+            )}
+            <button className="btn w-full" disabled={!canTrade || busy || profit === 0n || s.positions.length > 0 || !recipient || !allowed || check.result?.verdict === 'block'} onClick={() => trade('Payout sent.', { method: 'request_payout', args: { recipient } })}>
+              {check.result?.verdict === 'warn' ? 'Pay anyway' : 'Request payout'}
             </button>
+            {(s.approved_recipients?.length ?? 0) > 0 && (
+              <ul className="space-y-1 border-t border-line pt-2 text-xs text-mute">
+                {s.approved_recipients.map((r) => (
+                  <li key={r} className="num flex items-center justify-between gap-2">
+                    <span className="truncate">{r}</span>
+                    {accountId === s.trader && <button className="underline underline-offset-2" disabled={walletBusy} onClick={() => walletCall('Address removed.', 'revoke_payout_recipient', r)}>Revoke</button>}
+                  </li>
+                ))}
+              </ul>
+            )}
             {s.positions.length > 0 && <Notice>Close all positions before requesting a payout.</Notice>}
           </div>
           <PayoutQuote amountMicro={String(traderShare)} />

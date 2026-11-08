@@ -14,6 +14,7 @@
   "scripts": {
     "sandbox": "node scripts/sandbox.mjs",
     "deploy": "node scripts/deploy.mjs",
+    "update:contracts": "node scripts/update-testnet.mjs",
     "wasm:optimize": "node scripts/optimize-wasm.mjs",
     "faucet": "node scripts/faucet.mjs",
     "demo:eval": "node scripts/demo-eval.mjs",
@@ -22,7 +23,7 @@
     "attack-demo": "node agent/attack-demo.mjs",
     "agent": "node agent/agent.mjs",
     "keeper": "node keeper/keeper.mjs",
-    "test": "node --test \"packages/rules-ts/test/*.test.mjs\"",
+    "test": "node --test \"packages/*/test/*.test.mjs\"",
     "dev": "npm run dev -w apps/web",
     "build:web": "npm run build -w apps/web"
   },

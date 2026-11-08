@@ -8,7 +8,7 @@
     "SOL": "sol.tenor.testnet",
     "NEAR": "near.tenor.testnet"
   },
-  "guardHash": "DUi7F8m3PvpvwnjwpCgDycxYdrJ6jtMiSzW2npqwpkKw",
+  "guardHash": "6t2V8WDxGZstEP5TNofP9SD7pE8GEWtzoMTYNrFwrijJ",
   "useGlobal": false,
   "live": {
     "tenor": "tenor.testnet",
@@ -19,5 +19,6 @@
     "tenor": "demo.tenor.testnet",
     "oracle": "demo-oracle.tenor.testnet",
     "swap": "demo-swap.tenor.testnet"
-  }
+  },
+  "blocklist": "blocklist.tenor.testnet"
 }

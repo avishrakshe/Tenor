@@ -283,7 +283,7 @@ export function Checkout() {
                     ))}
                   </div>
                 </fieldset>
-                {method === 'bridge' && <CheckoutQuote />}
+                {method === 'bridge' && <CheckoutQuote defaultUsdc={Number(subtotal) / 1e6} />}
                 <section>
                   <h3 className="mb-2 text-sm text-mute">Order summary</h3>
                   <div className="space-y-5 rounded-lg border border-line p-4">

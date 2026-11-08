@@ -148,8 +148,12 @@ for (const sw of [live.swap, demo.swap]) {
   }
 }
 
+step(5, 'Shared blocklist');
+const blocklistId = id('blocklist');
+await createAndDeploy(parent, blocklistId, wasm('tenor_blocklist'), 'new', { owner: rootId }, 0.4);
+
 saveDeployment(near.network, {
-  network: near.network, root: rootId, usdc: usdcId, tokens, guardHash, useGlobal, live, demo,
+  network: near.network, root: rootId, usdc: usdcId, tokens, guardHash, useGlobal, live, demo, blocklist: blocklistId,
 });
 // The key for the contract accounts. Git-ignored.
 mkdirSync(new URL('../keys/', import.meta.url), { recursive: true });

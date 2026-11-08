@@ -94,6 +94,7 @@ export type GuardState = {
   locked: boolean;
   paid_to_trader: string;
   paid_to_firm: string;
+  approved_recipients: string[];
 };
 
 export type ReserveState = {

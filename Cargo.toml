@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/tenor-rules",
     "contracts/mock-ft",
+    "contracts/blocklist",
     "contracts/tenor-oracle",
     "contracts/mock-swap",
     "contracts/guard",

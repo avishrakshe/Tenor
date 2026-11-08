@@ -9,7 +9,7 @@ mod venue;
 use near_sdk::json_types::{I64, U128, U64};
 use near_sdk::serde_json::json;
 use near_sdk::{
-    env, ext_contract, near, require, AccountId, Allowance, Gas, NearToken, PanicOnDefault,
+    assert_one_yocto, env, ext_contract, near, require, AccountId, Allowance, Gas, NearToken, PanicOnDefault,
     Promise, PromiseError, PromiseOrValue, PublicKey,
 };
 use std::collections::HashMap;
@@ -36,6 +36,7 @@ const VENUE_STORAGE: NearToken = NearToken::from_millinear(100);
 /// A stuck in-flight action can be cleared after this long.
 const LOCK_TTL_NS: u64 = 300 * 1_000_000_000;
 const REFRESH_INTERVAL_NS: u64 = 60 * 1_000_000_000;
+const MAX_APPROVED_RECIPIENTS: usize = 8;
 /// Orders may not fill worse than this against the oracle, whatever the trader asks for. This
 /// stops a trader routing capital through a pool they control at a terrible price.
 const MAX_SLIPPAGE_BPS: u128 = 100;
@@ -137,6 +138,7 @@ pub struct GuardView {
     pub paid_to_trader: U128,
     pub paid_to_firm: U128,
     pub markets: Vec<MarketCfg>,
+    pub approved_recipients: Vec<AccountId>,
 }
 
 #[ext_contract(ext_oracle)]
@@ -170,6 +172,7 @@ pub struct Guard {
     key_allowance: NearToken,
     paid_to_trader: u128,
     paid_to_firm: u128,
+    approved_recipients: Vec<AccountId>,
 }
 
 fn event(name: &str, data: near_sdk::serde_json::Value) {
@@ -261,6 +264,7 @@ impl Guard {
             key_allowance: init.key_allowance,
             paid_to_trader: 0,
             paid_to_firm: 0,
+            approved_recipients: Vec::new(),
         }
     }
 
@@ -319,10 +323,38 @@ impl Guard {
         })
     }
 
-    /// Pays realised profit 80/20. Needs a flat account, so it never depends on a price. A bad
-    /// `recipient` can only hurt the trader: the firm's share goes to the treasury regardless.
+    /// Lets the trader's own wallet add a payout address. The key on this account signs as the
+    /// Guard, not as the trader, so an agent holding that key can never approve anything.
+    #[payable]
+    pub fn approve_payout_recipient(&mut self, recipient: AccountId) {
+        assert_one_yocto();
+        self.require_owner_wallet();
+        require!(
+            self.approved_recipients.len() < MAX_APPROVED_RECIPIENTS,
+            "Too many approved recipients"
+        );
+        if !self.approved_recipients.contains(&recipient) {
+            event("recipient_approved", json!({ "recipient": recipient }));
+            self.approved_recipients.push(recipient);
+        }
+    }
+
+    #[payable]
+    pub fn revoke_payout_recipient(&mut self, recipient: AccountId) {
+        assert_one_yocto();
+        self.require_owner_wallet();
+        self.approved_recipients.retain(|r| *r != recipient);
+        event("recipient_revoked", json!({ "recipient": recipient }));
+    }
+
+    /// Pays realised profit 80/20 to the trader's own account or an address their wallet
+    /// approved. Needs a flat account, so it never depends on a price.
     pub fn request_payout(&mut self, recipient: AccountId) -> Promise {
         self.require_trader();
+        require!(
+            recipient == self.trader || self.approved_recipients.contains(&recipient),
+            "Recipient is not approved by the trader's wallet"
+        );
         require!(self.status == GuardStatus::Active, "Account is not active");
         self.require_unlocked();
         require!(self.positions.is_empty(), "Close all positions first");
@@ -606,6 +638,7 @@ impl Guard {
             paid_to_trader: U128(self.paid_to_trader),
             paid_to_firm: U128(self.paid_to_firm),
             markets: self.markets.clone(),
+            approved_recipients: self.approved_recipients.clone(),
         }
     }
 }
@@ -615,6 +648,13 @@ impl Guard {
         require!(
             env::predecessor_account_id() == env::current_account_id(),
             "Only the trader key on this account"
+        );
+    }
+
+    fn require_owner_wallet(&self) {
+        require!(
+            env::predecessor_account_id() == self.trader,
+            "Only the trader's own wallet"
         );
     }
 
