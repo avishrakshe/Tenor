@@ -6,13 +6,22 @@
 // Prices come from the 1Click token list (GET /v0/tokens), which is free and needs no key. It
 // has no confidence interval, so the oracle gets a fixed 0.03% spread.
 // https://docs.near-intents.org/api-reference/oneclick/get-supported-tokens
-import { Near, MARKETS, argValue, loadDeployment, pushPrices, sleep, sponsor } from '../scripts/lib/near.mjs';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { Near, MARKETS, ROOT, argValue, loadDeployment, pushPrices, sleep, sponsor } from '../scripts/lib/near.mjs';
 
 const INTERVAL_MS = Number(argValue('interval', 30)) * 1000;
 const once = process.argv.includes('--once');
+const duration = Number(argValue('duration', 0)) * 1000;
+const started = Date.now();
 const near = new Near();
 const dep = loadDeployment(near.network);
-const keeper = sponsor(near);
+function keeperAccount() {
+  if (near.network !== 'sandbox') return sponsor(near);
+  const d = JSON.parse(readFileSync(join(ROOT, '.sandbox', 'deployer.json'), 'utf8'));
+  return near.account(d.accountId, d.secretKey);
+}
+const keeper = keeperAccount();
 
 // Symbol to the blockchain listing used as the reference price.
 const SOURCES = { BTC: 'btc', ETH: 'eth', SOL: 'sol', NEAR: 'near' };
@@ -53,7 +62,7 @@ for (;;) {
   } catch (e) {
     console.error('keeper error:', e.message);
   }
-  if (once) break;
+  if (once || (duration > 0 && Date.now() - started >= duration)) break;
   await sleep(INTERVAL_MS);
 }
 process.exit(0);

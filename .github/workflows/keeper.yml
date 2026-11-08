@@ -1,0 +1,23 @@
+# GitHub's schedule runs at most every 5 minutes, which is too slow for a 60s price limit, so each
+# run keeps pushing for just under 5 minutes. Needs the TENOR_ROOT_ACCOUNT and TENOR_ROOT_KEY
+# repository secrets. Disabled until they exist.
+name: keeper
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+jobs:
+  keep:
+    if: ${{ vars.KEEPER_ENABLED == '1' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --ignore-scripts
+      - run: npm run keeper -- --network testnet --interval 30 --duration 285
+        env:
+          TENOR_ROOT_ACCOUNT: ${{ secrets.TENOR_ROOT_ACCOUNT }}
+          TENOR_ROOT_KEY: ${{ secrets.TENOR_ROOT_KEY }}
