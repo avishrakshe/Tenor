@@ -16,6 +16,7 @@ type Session = {
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
   send: (call: Call) => Promise<unknown>;
+  sendMany: (calls: Call[]) => Promise<unknown[]>;
 };
 
 const Ctx = createContext<Session | null>(null);
@@ -153,9 +154,27 @@ export function SessionProvider({ config, children }: { config: AppConfig; child
     [sandbox, config.rpc],
   );
 
+  const sendMany = useCallback(
+    async (calls: Call[]) => {
+      if (sandbox) {
+        const out: unknown[] = [];
+        for (const call of calls) out.push(await send(call));
+        return out;
+      }
+      const wallet = await connector.current.wallet();
+      return wallet.signAndSendTransactions({
+        transactions: calls.map((call) => ({
+          receiverId: call.receiverId,
+          actions: [{ type: 'FunctionCall', params: { methodName: call.method, args: call.args, gas: call.gas ?? GAS_300, deposit: call.deposit ?? '0' } }],
+        })),
+      });
+    },
+    [sandbox, send],
+  );
+
   const value = useMemo(
-    () => ({ config, accountId, signIn, signOut, send }),
-    [config, accountId, signIn, signOut, send],
+    () => ({ config, accountId, signIn, signOut, send, sendMany }),
+    [config, accountId, signIn, signOut, send, sendMany],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

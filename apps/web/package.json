@@ -11,16 +11,21 @@
     "@hot-labs/near-connect": "^0.12.0",
     "@tenor/rules": "*",
     "function-call-key-plugin": "^2.2.0",
+    "geist": "^1.9.2",
+    "lightweight-charts": "^5.2.1",
+    "motion": "^14.10.1",
     "near-api-js": "^7.0.0",
     "next": "^16.4.5",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "three": "^0.187.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.5",
     "@types/node": "^24",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/three": "^0.187.0",
     "tailwindcss": "^4.3.5",
     "typescript": "^5"
   }

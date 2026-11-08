@@ -58,9 +58,10 @@ be waited for. Its price is the only thing scripted: the contracts are the same.
 
 1. Keep the sandbox running and run `npm run keeper -- --network sandbox` for real-time prices.
 2. Run `NEXT_PUBLIC_NETWORK=sandbox npm run dev`, then open http://localhost:3000.
-3. Click **Create sandbox account**, then **Free 10K demo**. **See:** an evaluation listed under *Your evaluations*.
-4. Open it and click **Place order**. **See:** a position, and the three objective meters move.
-5. Open `/transparency`. **See:** reserve, coverage and every funded account and breach, read live from the contract.
+3. Click **Open app**, then **Log in**, then **Create sandbox account**. **See:** your dashboard.
+4. Open **Buy Challenge**, pick **Demo** and click **Start demo**. **See:** the evaluation on your dashboard.
+5. Open it, click **MAX**, then **Buy BTC**. **See:** a position with breach and pass prices, and the risk meters move.
+6. Open `/transparency`. **See:** reserve, coverage and every funded account and breach, read live from the contract.
 
 ## Testnet
 
@@ -147,7 +148,8 @@ trader can't route capital through a pool they control at a bad price.
 - Spot, long or flat only. BTC, ETH, SOL and NEAR on testnet.
 - On mainnet, Rhea only has deep USDC liquidity for NEAR (pool 4512), so real swaps would be NEAR only.
 - With a 60-second price limit, a trader can act on information newer than the oracle. The spread and fee reduce this but don't remove it.
-- The price chart shows oracle prices since the page opened, because the oracle stores only the latest value.
+- Candle charts show public Coinbase market data for context. Fills use the onchain oracle, so there is no order book, and the two prices can differ slightly.
+- Checkout from another chain is a dry-run quote only. Card payment, email login and coupons don't exist.
 - Breach records link to the account and block rather than the exact transaction.
 - Popup-free evaluation trading needs a wallet that supports testnet and function-call keys. Others prompt on each order.
 - The trader key for a funded account lives in that browser's storage.
@@ -168,7 +170,7 @@ hackathon window, and only this work should be judged.
 ## Libraries used
 
 - Rust: `near-sdk`, `near-contract-standards`
-- JS: `near-api-js`, `@hot-labs/near-connect`, `function-call-key-plugin`, `next`, `react`, `tailwindcss`, `dotenv`, `bs58`
+- JS: `near-api-js`, `@hot-labs/near-connect`, `function-call-key-plugin`, `next`, `react`, `tailwindcss`, `three`, `motion`, `lightweight-charts`, `geist`, `dotenv`, `bs58`
 - Tools: `near-sandbox`
 - Reference only: `@ref-finance/ref-sdk` (swap message format), `near/intents` (Verifier source)
 - AI-generated code: parts of this repository were written with an AI coding assistant, as allowed by HACKATHON.md Q-005.

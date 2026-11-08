@@ -1,7 +1,9 @@
+import { GeistMono } from 'geist/font/mono';
+import { GeistSans } from 'geist/font/sans';
 import type { Metadata } from 'next';
-import { Nav } from '@/components/Nav';
-import { RequireDeployment } from '@/components/RequireDeployment';
+import { CartProvider } from '@/components/Cart';
 import { SessionProvider } from '@/components/Session';
+import { Shell } from '@/components/Shell';
 import { getConfig } from '@/lib/config';
 import './globals.css';
 
@@ -13,20 +15,13 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const config = getConfig();
   return (
-    <html lang="en">
+    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body>
-        <SessionProvider config={config}>
-          <Nav />
-          {!config.deployed && (
-            <p className="border-b border-line bg-panel px-4 py-2 text-center text-sm text-warn">
-              Contracts are not deployed on {config.network} yet, so trading is unavailable.
-            </p>
-          )}
-          <main className="mx-auto max-w-6xl px-4 py-8">
-            <RequireDeployment>{children}</RequireDeployment>
-          </main>
+        <SessionProvider config={getConfig()}>
+          <CartProvider>
+            <Shell>{children}</Shell>
+          </CartProvider>
         </SessionProvider>
       </body>
     </html>
