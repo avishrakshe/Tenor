@@ -2,8 +2,8 @@
 // Binary: https://github.com/near/near-sandbox (Linux x86_64 and macOS arm64 builds on S3).
 // On Windows it runs through WSL.
 import { spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
-import { homedir, platform, arch } from 'node:os';
+import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { platform, arch } from 'node:os';
 import { join } from 'node:path';
 import { ROOT } from './lib/near.mjs';
 
@@ -31,19 +31,16 @@ if (install.status !== 0) {
 // Copy the genesis key where scripts can read it.
 const home = install.stdout.trim().split('\n').pop();
 mkdirSync(join(ROOT, '.sandbox'), { recursive: true });
-let keyPath = join(home, 'validator_key.json');
 if (windows) {
   const copied = sh(`cat ${HOME_DIR}/validator_key.json`);
   const dest = join(ROOT, '.sandbox', 'validator_key.json');
   rmSync(dest, { force: true });
-  (await import('node:fs')).writeFileSync(dest, copied.stdout);
+  writeFileSync(dest, copied.stdout);
 } else {
-  copyFileSync(keyPath, join(ROOT, '.sandbox', 'validator_key.json'));
+  copyFileSync(join(home, 'validator_key.json'), join(ROOT, '.sandbox', 'validator_key.json'));
 }
 
 console.log('Sandbox RPC: http://127.0.0.1:3030 (Ctrl+C to stop)');
 const child = sh(`exec ${BIN} --home ${HOME_DIR} run 2>/dev/null`, { inherit: true });
 process.on('SIGINT', () => child.kill());
 child.on('exit', (code) => process.exit(code ?? 0));
-void homedir;
-void existsSync;
