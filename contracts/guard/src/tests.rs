@@ -211,6 +211,19 @@ fn payout_splits_80_20_and_protects_the_daily_baseline() {
 }
 
 #[test]
+fn payout_cannot_outrun_an_unpoked_breach() {
+    let mut g = guard();
+    g.cash = CAPITAL + 500 * USD;
+    g.day_start_equity = CAPITAL + 1_000 * USD; // Down 500 today: past the 300 daily limit.
+    ctx(ME);
+    let _ = g.request_payout("anyone.near".parse().unwrap());
+    let s = g.get_state();
+    assert_eq!(s.status, GuardStatus::Settled);
+    assert_eq!(s.breach_reason.as_deref(), Some("daily_loss"));
+    assert_eq!(s.paid_to_trader.0, 0);
+}
+
+#[test]
 fn failed_trader_leg_restores_only_its_share() {
     let mut g = guard();
     g.cash = CAPITAL + 1_000 * USD;

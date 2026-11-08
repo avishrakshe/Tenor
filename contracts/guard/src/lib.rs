@@ -326,6 +326,17 @@ impl Guard {
         require!(self.status == GuardStatus::Active, "Account is not active");
         self.require_unlocked();
         require!(self.positions.is_empty(), "Close all positions first");
+        // Flat, so equity is known without a price. A breach that nobody has poked yet must not
+        // be able to pay out first.
+        let today = rules::day_key(now_secs());
+        if today != self.day_key {
+            self.day_key = today;
+            self.day_start_equity = self.cash;
+        }
+        if let Some(reason) = self.flat_breach_reason() {
+            self.breach(reason, self.cash);
+            return self.settle();
+        }
         require!(self.cash > self.initial_balance, "No profit to pay out");
         let profit = self.cash - self.initial_balance;
         let (trader, firm) = rule(rules::split_profit(profit));
@@ -417,12 +428,7 @@ impl Guard {
                     day_start_equity: self.day_start_equity,
                     equity,
                 },
-                &rules::Ruleset {
-                    phase_one_target_bps: 0,
-                    phase_two_target_bps: None,
-                    max_drawdown_bps: self.max_drawdown_bps,
-                    daily_loss_bps: self.daily_loss_bps,
-                },
+                &self.ruleset(),
             ));
             if let Some(reason) = result.reason {
                 self.breach(reason.as_str(), equity);
@@ -610,6 +616,28 @@ impl Guard {
             env::predecessor_account_id() == env::current_account_id(),
             "Only the trader key on this account"
         );
+    }
+
+    fn flat_breach_reason(&self) -> Option<&'static str> {
+        let result = rule(rules::evaluate(
+            &rules::Snapshot {
+                phase: rules::Phase::Funded,
+                initial_balance: self.initial_balance,
+                day_start_equity: self.day_start_equity,
+                equity: self.cash,
+            },
+            &self.ruleset(),
+        ));
+        result.reason.map(|r| r.as_str())
+    }
+
+    fn ruleset(&self) -> rules::Ruleset {
+        rules::Ruleset {
+            phase_one_target_bps: 0,
+            phase_two_target_bps: None,
+            max_drawdown_bps: self.max_drawdown_bps,
+            daily_loss_bps: self.daily_loss_bps,
+        }
     }
 
     fn require_unlocked(&self) {
