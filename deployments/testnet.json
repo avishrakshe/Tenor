@@ -1,0 +1,23 @@
+{
+  "network": "testnet",
+  "root": "tenor.testnet",
+  "usdc": "usdc.tenor.testnet",
+  "tokens": {
+    "BTC": "btc.tenor.testnet",
+    "ETH": "eth.tenor.testnet",
+    "SOL": "sol.tenor.testnet",
+    "NEAR": "near.tenor.testnet"
+  },
+  "guardHash": "DUi7F8m3PvpvwnjwpCgDycxYdrJ6jtMiSzW2npqwpkKw",
+  "useGlobal": false,
+  "live": {
+    "tenor": "tenor.testnet",
+    "oracle": "oracle.tenor.testnet",
+    "swap": "swap.tenor.testnet"
+  },
+  "demo": {
+    "tenor": "demo.tenor.testnet",
+    "oracle": "demo-oracle.tenor.testnet",
+    "swap": "demo-swap.tenor.testnet"
+  }
+}

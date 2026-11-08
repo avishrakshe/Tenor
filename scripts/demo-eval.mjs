@@ -2,7 +2,7 @@
 import { fmtUsd, see, step } from './lib/near.mjs';
 import { BASE_PRICES, passChallenge, setup } from './lib/demo.mjs';
 
-const ctx = await setup('eval');
+const ctx = await setup('eval', { fundable: false });
 const { near, tenor, trader, challenge } = ctx;
 
 step(1, `Trader ${trader.id} takes USDC from the faucet and buys classic-1-5000`);

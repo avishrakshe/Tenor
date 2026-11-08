@@ -28,8 +28,11 @@ async function ensureRoot() {
   return near.account(rootId, deployKeyStr);
 }
 
-async function createAndDeploy(parent, id, code, method, args, amount) {
-  await parent.createAccount({ newAccountId: id, publicKey: deployPk, nearToTransfer: nearToYocto(amount) });
+// 1 NEAR locks 100 KB, so each account gets its code's storage plus a small working balance.
+const storageNear = (bytes, extra) => (bytes / 100_000 + extra).toFixed(3);
+
+async function createAndDeploy(parent, id, code, method, args, extra) {
+  await parent.createAccount({ newAccountId: id, publicKey: deployPk, nearToTransfer: nearToYocto(storageNear(code.length, extra)) });
   const acc = near.account(id, deployKeyStr);
   must(
     await near.send(acc, id, [
@@ -47,16 +50,16 @@ const parent = await ensureRoot();
 const id = (s) => `${s}.${rootId}`;
 
 const treasuryId = id('treasury');
-await parent.createAccount({ newAccountId: treasuryId, publicKey: deployPk, nearToTransfer: nearToYocto('1') });
+await parent.createAccount({ newAccountId: treasuryId, publicKey: deployPk, nearToTransfer: nearToYocto('0.2') });
 const treasury = near.account(treasuryId, deployKeyStr);
 
 step(1, 'Mock tokens');
 const usdcId = id('usdc');
-await createAndDeploy(parent, usdcId, ft, 'new', { name: 'Mock USDC', symbol: 'USDC', decimals: 6 }, '3');
+await createAndDeploy(parent, usdcId, ft, 'new', { name: 'Mock USDC', symbol: 'USDC', decimals: 6 }, 0.3);
 const tokens = {};
 for (const m of MARKETS) {
   tokens[m.symbol] = id(m.symbol.toLowerCase());
-  await createAndDeploy(parent, tokens[m.symbol], ft, 'new', { name: `Mock ${m.symbol}`, symbol: m.symbol, decimals: m.decimals }, '3');
+  await createAndDeploy(parent, tokens[m.symbol], ft, 'new', { name: `Mock ${m.symbol}`, symbol: m.symbol, decimals: m.decimals }, 0.2);
 }
 const markets = MARKETS.map((m) => ({ symbol: m.symbol, token: tokens[m.symbol], pool_id: 0 }));
 
@@ -76,10 +79,10 @@ async function deployStack(prefix, tenorAccountId, openOracle, parentAcc) {
   const swapId = id(`${prefix}swap`);
   await createAndDeploy(parent, oracleId, wasm('tenor_oracle'), 'new', {
     owner: rootId, pusher: rootId, open_push: openOracle, stale_threshold: 60,
-  }, '3');
+  }, 0.2);
   await createAndDeploy(parent, swapId, wasm('mock_swap'), 'new', {
     oracle: oracleId, usdc: usdcId, markets: markets.map(({ symbol, token }) => ({ symbol, token })),
-  }, '3');
+  }, 0.2);
 
   const init = {
     init: {
@@ -90,7 +93,8 @@ async function deployStack(prefix, tenorAccountId, openOracle, parentAcc) {
       venue: swapId,
       venue_kind: 'MockSwap',
       markets,
-      guard_near_budget: nearToYocto(useGlobal ? '1' : '4').toString(),
+      // A directly deployed Guard pays for its own code, plus gas for trading.
+      guard_near_budget: nearToYocto(useGlobal ? '1' : storageNear(guardCode.length, 1)).toString(),
       guard_code_hash: useGlobal ? guardHash : null,
       allow_demo_funding: true,
       // Checked at 10x the gas price when signing: a 300 TGas call needs 0.3 NEAR of allowance,
@@ -106,12 +110,11 @@ async function deployStack(prefix, tenorAccountId, openOracle, parentAcc) {
     ]), 'deploy tenor');
     see('deployed', rootId);
   } else {
-    await createAndDeploy(parent, tenorAccountId, code, 'new', init, '8');
+    await createAndDeploy(parent, tenorAccountId, code, 'new', init, (useGlobal ? 0 : guardCode.length / 100_000) + 0.4);
   }
   if (!useGlobal) {
-    const owner = tenorAccountId === rootId ? parentAcc : near.account(tenorAccountId, deployKeyStr);
     must(
-      await near.send(owner, tenorAccountId, [actions.functionCall('set_guard_code', guardCode, teraToGas('100'), 0n)]),
+      await near.send(parentAcc, tenorAccountId, [actions.functionCall('set_guard_code', guardCode, teraToGas('100'), 0n)]),
       'set_guard_code',
     );
   }

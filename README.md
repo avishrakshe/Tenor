@@ -11,9 +11,11 @@ Tracks: `defi`, `security`. Other submission: none.
 
 | Part | State |
 |---|---|
-| Contracts, rules, demos, attack demo | Run end to end on a local NEAR sandbox |
+| Contracts, rules, demos, attack demo | Run end to end on NEAR testnet and on a local sandbox |
 | 1Click checkout and payout quotes | Live mainnet quotes, dry-run only |
-| Testnet deployment | **Not deployed yet.** Needs about 75 testnet NEAR on the root account |
+| Testnet deployment | Live. Ids below |
+| Web app | Live at https://tenor-hazel-theta.vercel.app |
+| Wallet login on testnet | Built, not yet tested with a real wallet |
 | Mainnet swaps through Rhea | Adapter written and unit tested, **never run on mainnet** |
 | Chain Signatures, LP shares | Not built |
 
@@ -65,14 +67,14 @@ be waited for. Its price is the only thing scripted: the contracts are the same.
 
 ## Testnet
 
-The commands are the same with `--network testnet`, once a deployment exists.
+The contracts are deployed, so these run against the live demo stack.
 
 1. Run `npm run faucet`. **See:** a new account with 10 NEAR, saved to `.env`.
 2. Run `npm run demo:eval -- --network testnet`. **See:** `PASS`, plus an explorer link per transaction.
 3. Run `npm run demo:breach -- --network testnet` and `npm run attack-demo -- --network testnet`.
 
 To deploy your own: put a funded account in `.env` and run `npm run deploy -- --network testnet`.
-Publishing the Guard as a global contract burns about 29 NEAR; the other contracts and their balances take about 45.
+That needs about 27 NEAR with `--guard bytes`, where the factory deploys the Guard code directly. The default, a global contract, burns about 25 more when published.
 
 ## Dry-run 1Click
 
@@ -100,7 +102,18 @@ scripted worst-case mock by default; `--llm` with `ANTHROPIC_API_KEY` uses a rea
 
 ## Deployed contracts
 
-None on testnet yet. `deployments/testnet.json` will list every id once deployed.
+Testnet ids are also in [`deployments/testnet.json`](deployments/testnet.json).
+
+| Contract | Account |
+|---|---|
+| Tenor (live prices) | [tenor.testnet](https://testnet.nearblocks.io/address/tenor.testnet) |
+| Tenor (demo stack, scripted prices) | [demo.tenor.testnet](https://testnet.nearblocks.io/address/demo.tenor.testnet) |
+| Oracle | [oracle.tenor.testnet](https://testnet.nearblocks.io/address/oracle.tenor.testnet), [demo-oracle.tenor.testnet](https://testnet.nearblocks.io/address/demo-oracle.tenor.testnet) |
+| Mock swap venue | [swap.tenor.testnet](https://testnet.nearblocks.io/address/swap.tenor.testnet), [demo-swap.tenor.testnet](https://testnet.nearblocks.io/address/demo-swap.tenor.testnet) |
+| Mock USDC | [usdc.tenor.testnet](https://testnet.nearblocks.io/address/usdc.tenor.testnet) |
+| Mock market tokens | `btc`, `eth`, `sol` and `near` `.tenor.testnet` |
+
+A funded Guard from the demo run, with its trader key deleted: [1.demo.tenor.testnet](https://testnet.nearblocks.io/address/1.demo.tenor.testnet). The transaction that breached it: [38t6cptm…](https://testnet.nearblocks.io/txns/38t6cptmVT2rNUppo13ubnUaVDspUPUtfsnaUKcFjRz8).
 
 External dependencies, checked against the live chain or docs:
 
@@ -139,7 +152,7 @@ trader can't route capital through a pool they control at a bad price.
 - **Price oracle.** Pyth's Hermes has required a paid API key since 2026-08-26, and `pyth-oracle.testnet` has been stale since June 2026. The testnet stack therefore reads `tenor-oracle`, which has Pyth's interface and is pushed by one keeper account using 1Click's public prices with a fixed 0.03% spread. **That keeper could post false prices.** A Pyth deployment needs only a different oracle account id.
 - **OutLayer's oracle is not usable today.** `price-oracle.testnet` has none of Pyth's methods and no registered oracles.
 - **Owner powers.** The owner can change pass rates (new sales only) and the oracle for evaluations and future Guards. A live Guard's oracle and rules are fixed at creation.
-- **Contract upgrades.** `tenor` itself has an owner key while in development. Guards are deployed from an immutable code hash, with no full-access key.
+- **Contract upgrades.** `tenor` itself has an owner key while in development. Guards have no full-access key. On testnet the factory deploys Guard code it stores, because a global contract costs more testnet NEAR. The owner could change that code for future Guards but not existing ones, and each account’s code hash is public.
 - **Mock assets.** On testnet, USDC and the market tokens are mocks with an open faucet, and `mock-swap` mints its output.
 - **Keeper liveness.** A breach is only applied when someone calls `poke` or trades, so a dip between calls can go unseen.
 
@@ -159,7 +172,7 @@ trader can't route capital through a pool they control at a bad price.
 
 - `npm test`: shared vectors against the TypeScript rules.
 - `cargo test --workspace`: 87 tests covering the fee table, rule ordering, shared vectors and contract panic paths.
-- `scripts/build-wasm.sh`: rebuilds `wasm/`. Needs `RUSTFLAGS='--cfg near'`, which the script sets.
+- `scripts/build-wasm.sh` then `npm run wasm:optimize`: rebuilds and shrinks `wasm/`. The build needs `RUSTFLAGS='--cfg near'`, which the script sets.
 
 ## Prior work
 
@@ -171,7 +184,7 @@ hackathon window, and only this work should be judged.
 
 - Rust: `near-sdk`, `near-contract-standards`
 - JS: `near-api-js`, `@hot-labs/near-connect`, `function-call-key-plugin`, `next`, `react`, `tailwindcss`, `three`, `motion`, `lightweight-charts`, `geist`, `dotenv`, `bs58`
-- Tools: `near-sandbox`
+- Tools: `near-sandbox`, `binaryen`
 - Reference only: `@ref-finance/ref-sdk` (swap message format), `near/intents` (Verifier source)
 - AI-generated code: parts of this repository were written with an AI coding assistant, as allowed by HACKATHON.md Q-005.
 

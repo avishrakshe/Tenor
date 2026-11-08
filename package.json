@@ -14,6 +14,7 @@
   "scripts": {
     "sandbox": "node scripts/sandbox.mjs",
     "deploy": "node scripts/deploy.mjs",
+    "wasm:optimize": "node scripts/optimize-wasm.mjs",
     "faucet": "node scripts/faucet.mjs",
     "demo:eval": "node scripts/demo-eval.mjs",
     "demo:breach": "node scripts/demo-breach.mjs",
@@ -29,5 +30,8 @@
     "bs58": "^6.0.0",
     "dotenv": "^17.2.0",
     "near-api-js": "^7.0.0"
+  },
+  "devDependencies": {
+    "binaryen": "^132.0.0"
   }
 }
