@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Nav } from '@/components/Nav';
+import { RequireDeployment } from '@/components/RequireDeployment';
 import { SessionProvider } from '@/components/Session';
 import { getConfig } from '@/lib/config';
 import './globals.css';
@@ -20,10 +21,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Nav />
           {!config.deployed && (
             <p className="border-b border-line bg-panel px-4 py-2 text-center text-sm text-warn">
-              No {config.network} deployment found. Run npm run deploy -- --network {config.network}.
+              Contracts are not deployed on {config.network} yet, so trading is unavailable.
             </p>
           )}
-          <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+          <main className="mx-auto max-w-6xl px-4 py-8">
+            <RequireDeployment>{children}</RequireDeployment>
+          </main>
         </SessionProvider>
       </body>
     </html>

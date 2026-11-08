@@ -26,7 +26,7 @@ export function Nav() {
             {accountId}
           </button>
         ) : (
-          <button className="btn" onClick={signIn}>
+          <button className="btn" onClick={signIn} disabled={!config.deployed}>
             {config.network === 'sandbox' ? 'Create sandbox account' : 'Connect wallet'}
           </button>
         )}
