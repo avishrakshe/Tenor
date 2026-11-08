@@ -14,6 +14,7 @@
   "scripts": {
     "sandbox": "node scripts/sandbox.mjs",
     "deploy": "node scripts/deploy.mjs",
+    "faucet": "node scripts/faucet.mjs",
     "demo:eval": "node scripts/demo-eval.mjs",
     "demo:breach": "node scripts/demo-breach.mjs",
     "demo:oneclick": "node scripts/demo-oneclick.mjs",
