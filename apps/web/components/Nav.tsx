@@ -3,6 +3,7 @@
 import { useClerk, useUser } from '@clerk/nextjs';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { loginEnabled } from '@/lib/login-mode';
 import { CartButton } from './Cart';
 import { ArrowIcon, MarkIcon } from './motion';
 import { useSession } from './Session';
@@ -66,7 +67,6 @@ function Account() {
 
 export function Nav() {
   const pathname = usePathname();
-  const { config } = useSession();
   if (pathname.startsWith('/login')) return null;
 
   if (pathname === '/') {
@@ -103,7 +103,7 @@ export function Nav() {
         <div className="ml-auto flex items-center gap-3">
           <StackSwitch />
           <CartButton />
-          {config.network !== 'sandbox' && <Account />}
+          {loginEnabled && <Account />}
         </div>
       </nav>
     </header>

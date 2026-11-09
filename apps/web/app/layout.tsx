@@ -6,6 +6,7 @@ import { CartProvider } from '@/components/Cart';
 import { SessionProvider } from '@/components/Session';
 import { Shell } from '@/components/Shell';
 import { getRequestConfig } from '@/lib/config';
+import { loginEnabled } from '@/lib/login-mode';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -27,7 +28,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body>
-        {config.network === 'sandbox' ? app : <ClerkProvider signInUrl="/login">{app}</ClerkProvider>}
+        {loginEnabled ? <ClerkProvider signInUrl="/login">{app}</ClerkProvider> : app}
       </body>
     </html>
   );

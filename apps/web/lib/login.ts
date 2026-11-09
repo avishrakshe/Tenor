@@ -1,10 +1,9 @@
 'use client';
 
 import { useAuth, useUser } from '@clerk/nextjs';
+import { loginEnabled } from './login-mode';
 
-// The network is fixed at build time, so each build always calls the same hooks. A local sandbox
-// has no Clerk provider: anyone on it is treated as logged in.
-const sandbox = process.env.NEXT_PUBLIC_NETWORK === 'sandbox';
-
-export const useSignedIn = sandbox ? () => true : () => Boolean(useAuth().isSignedIn);
-export const useLoginUser = sandbox ? () => null : () => useUser().user ?? null;
+// `loginEnabled` is fixed at build time, so each build always calls the same hooks. With login off
+// there is no Clerk provider, and anyone is treated as logged in.
+export const useSignedIn = loginEnabled ? () => Boolean(useAuth().isSignedIn) : () => true;
+export const useLoginUser = loginEnabled ? () => useUser().user ?? null : () => null;
