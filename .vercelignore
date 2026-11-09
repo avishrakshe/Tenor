@@ -21,7 +21,7 @@ wasm/
 contracts/
 crates/
 agent/
-keeper/
+/keeper/
 tests/
 test-vectors/
 deployments/sandbox.json
