@@ -2,6 +2,7 @@
 .env.*
 !.env.example
 keys/
+.clerk/
 .sandbox/
 submission-draft.md
 .agents/
@@ -24,3 +25,4 @@ keeper/
 tests/
 test-vectors/
 deployments/sandbox.json
+deployments/money-proof.sandbox.json

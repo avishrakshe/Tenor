@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { productName, productSize } from '@/lib/catalog';
 import { usd, view, type Challenge } from '@/lib/chain';
+import { emitted } from '@/lib/outcome';
 import { CheckoutQuote } from './OneClick';
 import { useSession } from './Session';
 import { Notice, usePoll } from './ui';
@@ -191,7 +192,7 @@ function CartPopover() {
 
 export function Checkout() {
   const { items, open, setOpen, subtotal, sizeInCart, clear } = useCart();
-  const { config, accountId, sendMany, send } = useSession();
+  const { config, accountId, sendMany, send, connect } = useSession();
   const router = useRouter();
   const active = useActiveCapital();
   const [method, setMethod] = useState<'near' | 'bridge'>('near');
@@ -219,6 +220,18 @@ export function Checkout() {
     }
   }
 
+  async function connectToPay() {
+    setBusy(true);
+    setError(null);
+    try {
+      await connect();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function pay() {
     setBusy(true);
     setError(null);
@@ -235,6 +248,8 @@ export function Checkout() {
       const results = (await sendMany(calls)) as { status?: { Failure?: unknown } }[];
       const failed = results.find((r) => r?.status?.Failure);
       if (failed) throw new Error(JSON.stringify(failed.status?.Failure).slice(0, 200));
+      // The token refunds a purchase the contract refuses, and the transaction still succeeds.
+      if (results.some((r) => !emitted(r, 'challenge_opened'))) throw new Error('The contract refused this purchase and your USDC was refunded.');
       clear();
       setOpen('none');
       setAgreed(false);
@@ -313,7 +328,7 @@ export function Checkout() {
                     {busy ? 'Confirming…' : `Pay ${usd(subtotal)}`}
                   </button>
                 ) : (
-                  <button className="btn w-full" onClick={() => { setOpen('none'); router.push('/login'); }}>Log in to pay</button>
+                  <button className="btn w-full" onClick={connectToPay} disabled={busy}>Connect wallet to pay</button>
                 )}
               </div>
             </motion.aside>

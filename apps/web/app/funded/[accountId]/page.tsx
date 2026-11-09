@@ -7,6 +7,7 @@ import { sendWithKey, useSession, type Call } from '@/components/Session';
 import { TradeTerminal } from '@/components/TradeTerminal';
 import { Notice, Stat, usePoll } from '@/components/ui';
 import { accessKeys, usd, view, type Funded, type GuardState } from '@/lib/chain';
+import { outcomeMessage } from '@/lib/outcome';
 
 function storedKey(challengeId: number | null): string | null {
   if (challengeId === null) return null;
@@ -56,7 +57,7 @@ export default function FundedPage({ params }: { params: Promise<{ accountId: st
     setMsg(null);
     try {
       const r = (await send({ receiverId: guard, method, args: { recipient: who }, deposit: '1', gas: '30000000000000' })) as { status?: { Failure?: unknown } };
-      setMsg(r?.status?.Failure ? { tone: 'error', text: JSON.stringify(r.status.Failure).slice(0, 200) } : { tone: 'info', text: ok });
+      setMsg(outcomeMessage(r, ok));
     } catch (e) {
       setMsg({ tone: 'error', text: e instanceof Error ? e.message : String(e) });
     } finally {
@@ -70,11 +71,23 @@ export default function FundedPage({ params }: { params: Promise<{ accountId: st
     setMsg(null);
     try {
       const r = (await sendWithKey(config.rpc, guard, traderKey, { ...call, receiverId: guard })) as unknown as { status?: { Failure?: unknown } };
-      setMsg(r?.status?.Failure ? { tone: 'error', text: JSON.stringify(r.status.Failure).slice(0, 200) } : { tone: 'info', text: ok });
+      setMsg(outcomeMessage(r, ok));
     } catch (e) {
       setMsg({ tone: 'error', text: e instanceof Error ? e.message : String(e) });
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function applyRules() {
+    setWalletBusy(true);
+    setMsg(null);
+    try {
+      setMsg(outcomeMessage(await send({ receiverId: config.stack.tenor, method: 'poke', args: { account: guard } }), 'Rules applied.'));
+    } catch (e) {
+      setMsg({ tone: 'error', text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setWalletBusy(false);
     }
   }
 
@@ -97,6 +110,20 @@ export default function FundedPage({ params }: { params: Promise<{ accountId: st
       message={msg ?? (!traderKey && active ? { tone: 'info', text: 'This browser does not hold the trader key for this account, so it is read-only here.' } : null)}
       onBuy={(symbol, usdc, tp, sl) => trade('Swap executed. The book is rebuilt from token balances.', { method: 'place_order', args: { symbol, usdc, tp_e8: tp, sl_e8: sl } })}
       onClose={(symbol) => trade('Position sold.', { method: 'close_position', args: { symbol } })}
+      actions={
+        <>
+          {canTrade && (
+            <button className="btn btn-ghost !min-h-9" disabled={busy} title="Sells everything, pays your 80% and returns the capital" onClick={() => trade('Ending the account. If it still shows Closing, press Apply rules.', { method: 'close_position', args: { end_account: true } })}>
+              End account
+            </button>
+          )}
+          {s.status !== 'Settled' && (
+            <button className="btn btn-ghost !min-h-9" disabled={walletBusy || !accountId} title="Anyone can apply the rules to any account" onClick={applyRules}>
+              Apply rules
+            </button>
+          )}
+        </>
+      }
     >
       <div className="grid gap-2 lg:grid-cols-2">
         <section className="panel" aria-labelledby="keys">
@@ -134,7 +161,7 @@ export default function FundedPage({ params }: { params: Promise<{ accountId: st
                     Approve this address in my wallet
                   </button>
                 ) : (
-                  <Notice>Log in with {s.trader} to approve it.</Notice>
+                  <Notice>Connect {s.trader} to approve it.</Notice>
                 )}
               </div>
             )}

@@ -1,0 +1,213 @@
+{
+  "network": "testnet",
+  "stack": "demo",
+  "ranAt": "2026-11-09T20:57:11.407Z",
+  "ok": true,
+  "tenor": "demo.tenor.testnet",
+  "trader": "money-mw9qmlrm.tenor-judge-mw9qmi6q.testnet",
+  "guards": [
+    "6.demo.tenor.testnet",
+    "7.demo.tenor.testnet"
+  ],
+  "summary": {
+    "feesPaid": "72000000",
+    "traderReceived": "107015465",
+    "firmReceived": "26753867",
+    "reserveCoveredLoss": "207675730"
+  },
+  "steps": [
+    {
+      "step": 1,
+      "title": "Faucet: the trader gets test USDC",
+      "ok": true,
+      "txs": [
+        "https://testnet.nearblocks.io/txns/7mvVSvHinvxmikUvVjhaEM1GQvuXAXVt6ETwXweAQ24N"
+      ],
+      "deltas": {
+        "trader": "1000000000",
+        "supply": "1000000000"
+      }
+    },
+    {
+      "step": 2,
+      "title": "Buy classic-1-5000: the fee goes to the risk reserve",
+      "ok": true,
+      "txs": [
+        "https://testnet.nearblocks.io/txns/31E4X8bxLdrh4XyqBmu1FRX3ShJH3YeEvm47Y6gAXo7R"
+      ],
+      "deltas": {
+        "trader": "-36000000",
+        "tenor": "36000000",
+        "reserve": "36000000"
+      }
+    },
+    {
+      "step": 3,
+      "title": "Pass the evaluation on paper: no real money may move",
+      "ok": true,
+      "txs": [
+        "https://testnet.nearblocks.io/txns/3f5xJLn48ZjDzxvgTyxu5PwaySgJ4akiKQkaF6AC9fAW",
+        "https://testnet.nearblocks.io/txns/3gJkCZ6fDXKMDmL5kC2qCx8XCtkiZXFQKwkdm992SSwD"
+      ],
+      "deltas": {}
+    },
+    {
+      "step": 4,
+      "title": "fund(): capital leaves the vault for a new Guard account",
+      "ok": true,
+      "txs": [
+        "https://testnet.nearblocks.io/txns/3SpKiDTnkYVtN7SRSywvAKNQupPFjAhiNbEAsjMFQpXc"
+      ],
+      "deltas": {
+        "tenor": "-5000000000",
+        "guard1": "5000000000",
+        "vault": "-5000000000",
+        "capital_deployed": "5000000000",
+        "live_max_loss": "375000000"
+      }
+    },
+    {
+      "step": 5,
+      "title": "Swap all capital into BTC at $75000: USDC goes to the venue",
+      "ok": true,
+      "txs": [
+        "https://testnet.nearblocks.io/txns/3GmDyNzLiMSTXZQ9d6PYLKKSCmP3km1JkMTK4KoVV4da"
+      ],
+      "deltas": {
+        "venue": "5000000000",
+        "guard1": "-5000000000"
+      }
+    },
+    {
+      "step": 6,
+      "title": "BTC +2%: sell, and the proceeds return to the Guard",
+      "ok": true,
+      "txs": [
+        "https://testnet.nearblocks.io/txns/E7W5PRhEbUDQQE58CUBUb3s7qSg5mCVnCFJJspHVDLEJ"
+      ],
+      "deltas": {
+        "guard1": "5091844537",
+        "supply": "5091844537"
+      }
+    },
+    {
+      "step": 7,
+      "title": "Payout: $91.84 profit splits 80/20, capital stays put",
+      "ok": true,
+      "txs": [
+        "https://testnet.nearblocks.io/txns/5ZcwfpDtmV1rRpEARYkZCoQRK4Zv1135tzFsSuMbfCSZ"
+      ],
+      "deltas": {
+        "trader": "73475629",
+        "treasury": "18368908",
+        "guard1": "-91844537"
+      }
+    },
+    {
+      "step": 8,
+      "title": "The trade-only key tries to pay a stranger: nothing may move",
+      "ok": true,
+      "txs": [
+        "https://testnet.nearblocks.io/txns/B2i27SJSiyDDCnLt5xW6gVXQ7J6WeQxWnRKFH3E2kMNU"
+      ],
+      "deltas": {}
+    },
+    {
+      "step": 9,
+      "title": "Swap all capital into BTC at $76500: USDC goes to the venue",
+      "ok": true,
+      "txs": [
+        "https://testnet.nearblocks.io/txns/HNcYKkVyJ1xnAYk7C2aLMeY5F4bDoNQs3Z5SyaUhu5p4"
+      ],
+      "deltas": {
+        "venue": "5000000000",
+        "guard1": "-5000000000"
+      }
+    },
+    {
+      "step": 10,
+      "title": "Trader ends the account: profit splits, all capital returns to the vault",
+      "ok": true,
+      "txs": [
+        "https://testnet.nearblocks.io/txns/5UHSxVX2cL8WKxoymHLUVM65xkd2iMByqWNjgkh6CNf4",
+        "https://testnet.nearblocks.io/txns/8EoihvFrJGsGCVKgULEv6ErWJWCLnJ9XfdtSkEPaPND7"
+      ],
+      "deltas": {
+        "trader": "33539836",
+        "tenor": "5000000000",
+        "treasury": "8384959",
+        "supply": "5041924795",
+        "vault": "5000000000",
+        "capital_deployed": "-5000000000",
+        "live_max_loss": "-375000000"
+      }
+    },
+    {
+      "step": 11,
+      "title": "Buy classic-1-5000: the fee goes to the risk reserve",
+      "ok": true,
+      "txs": [
+        "https://testnet.nearblocks.io/txns/Axj9iE2qwbuteGVd7H8wz3cxyJW2yAG7mLyNqzsRJjqR"
+      ],
+      "deltas": {
+        "trader": "-36000000",
+        "tenor": "36000000",
+        "reserve": "36000000"
+      }
+    },
+    {
+      "step": 12,
+      "title": "Pass the evaluation on paper: no real money may move",
+      "ok": true,
+      "txs": [
+        "https://testnet.nearblocks.io/txns/FgqdzfwNjATPkaA3pZLAZ7Ugop7PQoTPtYLRY2haKfcu",
+        "https://testnet.nearblocks.io/txns/D66iFv8hECUZUURkQC15NH1nBGrkYULNyP3SpKXGBo8L"
+      ],
+      "deltas": {}
+    },
+    {
+      "step": 13,
+      "title": "fund(): capital leaves the vault for a new Guard account",
+      "ok": true,
+      "txs": [
+        "https://testnet.nearblocks.io/txns/7xqixWbVdgHx8X9niLonYYy6wye1LfDrStBenP15pLN7"
+      ],
+      "deltas": {
+        "tenor": "-5000000000",
+        "guard2": "5000000000",
+        "vault": "-5000000000",
+        "capital_deployed": "5000000000",
+        "live_max_loss": "375000000"
+      }
+    },
+    {
+      "step": 14,
+      "title": "Swap all capital into BTC at $75000: USDC goes to the venue",
+      "ok": true,
+      "txs": [
+        "https://testnet.nearblocks.io/txns/4SA3Wmi1J82evFpvgg6FFPALZS1RYKxgU2pKBuwwmB2B"
+      ],
+      "deltas": {
+        "venue": "5000000000",
+        "guard2": "-5000000000"
+      }
+    },
+    {
+      "step": 15,
+      "title": "BTC -4%: breach, forced sale, and the reserve covers the $207.68 loss",
+      "ok": true,
+      "txs": [
+        "https://testnet.nearblocks.io/txns/2PywuBD8nZ3Fno2DnDnyCZmriG3KhbmoZX7LF7bP3FNC",
+        "https://testnet.nearblocks.io/txns/2kXReaahF2hwCn7WEZvbYZA1gTyeLidxgGuKDV7RAzrH"
+      ],
+      "deltas": {
+        "tenor": "4792324270",
+        "supply": "4792324270",
+        "reserve": "-207675730",
+        "vault": "5000000000",
+        "capital_deployed": "-5000000000",
+        "live_max_loss": "-375000000"
+      }
+    }
+  ]
+}

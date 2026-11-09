@@ -1,13 +1,13 @@
 import { Landing, type LiveStats } from '@/components/Landing';
 import { view, type Breach, type Funded, type ReserveState } from '@/lib/chain';
-import { getConfig } from '@/lib/config';
+import { getRequestConfig } from '@/lib/config';
 
 export const dynamic = 'force-dynamic';
 
 const EMPTY: LiveStats = { reserve: null, liveMaxLoss: null, coverage: null, funded: null, breaches: null };
 
 async function readStats(): Promise<LiveStats> {
-  const config = getConfig();
+  const config = await getRequestConfig();
   if (!config.deployed) return EMPTY;
   const tenor = config.stack.tenor;
   try {

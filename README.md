@@ -5,13 +5,15 @@ evaluation, and if they hit the target inside the loss limits they trade real ca
 of the profit. The firm cannot hold trades in-house, cannot change a verdict, and cannot move a
 funded account's money.
 
-Tracks: `defi`, `security`. Other submission: none.
+Tracks: `security` (primary), `defi`. Other submission: none.
 
 ## Status
 
 | Part | State |
 |---|---|
 | Contracts, rules, demos, attack demo | Run end to end on NEAR testnet and on a local sandbox |
+| Money movement | `npm run demo:money` checks every balance to the micro-USDC across 15 steps, on testnet and sandbox. The latest run is at `/proof` |
+| Full web journey (buy, pass, fund, swap, payout, end account) | Driven through the browser UI on a local sandbox |
 | 1Click checkout and payout quotes | Live mainnet quotes, dry-run only |
 | Testnet deployment | Live. Ids below |
 | Web app | Live at https://tenor-hazel-theta.vercel.app |
@@ -58,20 +60,47 @@ be waited for. Its price is the only thing scripted: the contracts are the same.
 
 ### Web app on the sandbox
 
-1. Keep the sandbox running and run `npm run keeper -- --network sandbox` for real-time prices.
-2. Run `NEXT_PUBLIC_NETWORK=sandbox npm run dev`, then open http://localhost:3000.
-3. Click **Open app**, then **Log in**, then **Create sandbox account**. **See:** your dashboard.
-4. Open **Buy Challenge**, pick **Demo** and click **Start demo**. **See:** the evaluation on your dashboard.
-5. Open it, click **MAX**, then **Buy BTC**. **See:** a position with breach and pass prices, and the risk meters move.
-6. Open `/transparency`. **See:** reserve, coverage and every funded account and breach, read live from the contract.
+This needs no wallet and no Clerk keys. The page refreshes oracle prices by itself while a trading screen is open.
+
+1. Keep the sandbox running. Run `NEXT_PUBLIC_NETWORK=sandbox npm run dev`, then open http://localhost:3000/dashboard.
+2. Click **Create sandbox account** (bottom right). **See:** your account id there.
+3. Click **Demo mode: off** in the top bar. **See:** it changes to **Demo mode: on**.
+4. Open **Buy Challenge**, pick **5K**, **Add to cart**, **Checkout**, **Get test USDC**, tick the box, **Pay $36.00**. **See:** the evaluation on your dashboard.
+5. Open it, click **MAX**, **Buy BTC**, then **BTC +11%** and **Apply rules**. **See:** status `Passed`.
+6. Click **Fund account**. **See:** a funded page with exactly one function-call key listed.
+7. Click **MAX**, **Buy BTC**, **BTC +2%**, then **Sell / Close** and **Close BTC**. **See:** `Your 80%` above zero.
+8. Enter your own account as the recipient and click **Request payout**. **See:** `Paid so far` equals 80% of the profit.
+9. Click **End account**. **See:** status `Settled` and `No keys remain`.
+10. Open `/transparency` for the reserve and every funded account, and `/proof` for the recorded money proof.
+
+## Prove where the money goes
+
+`npm run demo:money` runs a winning trader and a breaching trader through the contracts. Each step reads every party's token balance and the contract's books from the chain before and after, and compares the change with an amount calculated separately by `packages/rules-ts` from the oracle price. One micro-USDC off fails the run.
+
+| Step | Exact movement checked |
+|---|---|
+| Buy a challenge | Trader's fee moves to Tenor and is booked to the reserve |
+| Pass the evaluation | Nothing moves: evaluations are paper accounts |
+| `fund` | $5,000 moves from the vault to a new Guard account |
+| Swap | All capital moves to the venue, and the BTC received matches the rules exactly |
+| Payout | Profit splits 80/20 to the trader and treasury. Capital stays in the Guard |
+| Trade-only key pays a stranger | Refused. Nothing moves |
+| End the account | Profit splits 80/20 and all capital returns to the vault |
+| Breach | The trader gets nothing, the key is deleted, and the reserve covers the loss |
+
+After every step, Tenor's real token balance must match its reserve and vault books, the Guard's book must match its token balance, and the sum of all changes must equal what the token minted. Run it with `--network sandbox`, or on testnet after `npm run faucet`. It writes `deployments/money-proof.<network>.json`, which `/proof` displays.
 
 ## Testnet
 
 The contracts are deployed, so these run against the live demo stack.
 
 1. Run `npm run faucet`. **See:** a new account with 10 NEAR, saved to `.env`.
-2. Run `npm run demo:eval -- --network testnet`. **See:** `PASS`, plus an explorer link per transaction.
-3. Run `npm run demo:breach -- --network testnet` and `npm run attack-demo -- --network testnet`.
+2. Run `npm run demo:money -- --network testnet`. **See:** a `PASS` line, plus an explorer link per transaction.
+3. Run `npm run demo:eval -- --network testnet`, `npm run demo:breach -- --network testnet` and `npm run attack-demo -- --network testnet`. Each needs a freshly funded sponsor.
+
+On the hosted site, the **Demo mode** switch uses these same contracts with prices anyone can set, so a pass or breach takes seconds instead of a real 10% market move. With it off, the site trades against live prices.
+
+The site keeps prices fresh with `/api/keeper`, called while a trading screen is open. It signs with keys that can call only `push_prices` on one oracle. To set them up, run `npm run keeper:keys -- --network testnet`, then copy the `KEEPER_` values from `apps/web/.env.local` into the host's environment variables.
 
 To deploy your own: put a funded account in `.env` and run `npm run deploy -- --network testnet`.
 That needs about 27 NEAR with `--guard bytes`, where the factory deploys the Guard code directly. The default, a global contract, burns about 25 more when published.
@@ -200,7 +229,7 @@ trader can't route capital through a pool they control at a bad price.
 - **Owner powers.** The owner can change pass rates (new sales only) and the oracle for evaluations and future Guards. A live Guard's oracle and rules are fixed at creation.
 - **Contract upgrades.** `tenor` itself has an owner key while in development. Guards have no full-access key. On testnet the factory deploys Guard code it stores, because a global contract costs more testnet NEAR. The owner could change that code for future Guards but not existing ones, and each account’s code hash is public.
 - **Mock assets.** On testnet, USDC and the market tokens are mocks with an open faucet, and `mock-swap` mints its output.
-- **Keeper liveness.** A breach is only applied when someone calls `poke` or trades, so a dip between calls can go unseen.
+- **Keeper liveness.** A breach is only applied when someone calls `poke` or trades, so a dip between calls can go unseen. The web app refreshes prices only while a trading screen is open, so with nobody watching, prices go stale and nothing fills until someone returns.
 
 ## Limitations
 
@@ -218,7 +247,7 @@ trader can't route capital through a pool they control at a bad price.
 ## Tests
 
 - `npm test`: 32 tests, covering the shared vectors against the TypeScript rules and the counterparty policy.
-- `cargo test --workspace`: 102 tests covering the fee table, rule ordering, shared vectors and contract panic paths.
+- `cargo test --workspace`: 107 tests covering the fee table, rule ordering, shared vectors, contract panic paths and failed payout or settlement legs.
 - `scripts/build-wasm.sh` then `npm run wasm:optimize`: rebuilds and shrinks `wasm/`. The build needs `RUSTFLAGS='--cfg near'`, which the script sets.
 
 ## Prior work
@@ -230,7 +259,7 @@ hackathon window, and only this work should be judged.
 ## Libraries used
 
 - Rust: `near-sdk`, `near-contract-standards`
-- JS: `near-api-js`, `@hot-labs/near-connect`, `function-call-key-plugin`, `next`, `react`, `tailwindcss`, `three`, `motion`, `lightweight-charts`, `geist`, `dotenv`, `bs58`
+- JS: `near-api-js`, `@hot-labs/near-connect`, `function-call-key-plugin`, `@clerk/nextjs`, `next`, `react`, `tailwindcss`, `three`, `motion`, `lightweight-charts`, `geist`, `dotenv`, `bs58`
 - Tools: `near-sandbox`, `binaryen`
 - Data: FastNear RPC and Transactions API, Coinbase Exchange market data
 - Reference only: `@ref-finance/ref-sdk` (swap message format), `near/intents` (Verifier source)

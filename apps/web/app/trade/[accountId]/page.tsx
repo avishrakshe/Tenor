@@ -8,6 +8,7 @@ import { useSession, writeStore } from '@/components/Session';
 import { TradeTerminal } from '@/components/TradeTerminal';
 import { Notice, usePoll } from '@/components/ui';
 import { view, type Challenge } from '@/lib/chain';
+import { outcomeMessage } from '@/lib/outcome';
 
 type Msg = { tone: 'info' | 'error'; text: string } | null;
 
@@ -31,7 +32,7 @@ export default function Trade({ params }: { params: Promise<{ accountId: string 
     setMsg(null);
     try {
       const r = (await fn()) as { status?: { Failure?: unknown } };
-      setMsg(r?.status?.Failure ? { tone: 'error', text: JSON.stringify(r.status.Failure).slice(0, 200) } : { tone: 'info', text: ok });
+      setMsg(outcomeMessage(r, ok));
     } catch (e) {
       setMsg({ tone: 'error', text: e instanceof Error ? e.message : String(e) });
     } finally {

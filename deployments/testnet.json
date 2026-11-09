@@ -8,7 +8,7 @@
     "SOL": "sol.tenor.testnet",
     "NEAR": "near.tenor.testnet"
   },
-  "guardHash": "6t2V8WDxGZstEP5TNofP9SD7pE8GEWtzoMTYNrFwrijJ",
+  "guardHash": "9RKYZyLtzbdUyPf6cvdtePMG6nsrvwxR7r8JwTnK3Xx8",
   "useGlobal": false,
   "live": {
     "tenor": "tenor.testnet",

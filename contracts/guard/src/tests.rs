@@ -284,16 +284,110 @@ fn payout_cannot_outrun_an_unpoked_breach() {
 }
 
 #[test]
-fn failed_trader_leg_restores_only_its_share() {
+fn failed_trader_leg_pays_nobody_and_a_retry_is_still_80_20() {
     let mut g = guard();
     g.cash = CAPITAL + 1_000 * USD;
     g.day_start_equity = g.cash;
     ctx(ME);
     let _ = g.request_payout("trader.near".parse().unwrap());
     let _ = g.on_trader_paid(U128(800 * USD), U128(200 * USD), false, Err(PromiseError::Failed));
-    assert_eq!(g.get_state().cash.0, CAPITAL + 800 * USD);
-    assert_eq!(g.get_state().paid_to_trader.0, 0);
+    let s = g.get_state();
+    assert_eq!(s.cash.0, CAPITAL + 1_000 * USD);
+    assert_eq!(s.day_start_equity.0, CAPITAL + 1_000 * USD);
+    assert_eq!(s.paid_to_trader.0, 0);
+    assert_eq!(s.paid_to_firm.0, 0);
+    assert!(!s.locked);
+
+    let _ = g.request_payout("trader.near".parse().unwrap());
+    assert_eq!(g.get_state().paid_to_trader.0, 800 * USD);
     assert_eq!(g.get_state().paid_to_firm.0, 200 * USD);
+}
+
+#[test]
+fn failed_firm_leg_is_owed_and_never_split_again() {
+    let mut g = guard();
+    g.cash = CAPITAL + 1_000 * USD;
+    g.day_start_equity = g.cash;
+    ctx(ME);
+    let _ = g.request_payout("trader.near".parse().unwrap());
+    let _ = g.on_firm_paid(U128(800 * USD), U128(200 * USD), false, Err(PromiseError::Failed));
+    let s = g.get_state();
+    assert_eq!(s.cash.0, CAPITAL + 200 * USD);
+    assert_eq!(s.paid_to_firm.0, 0);
+    assert_eq!(s.firm_owed.0, 200 * USD);
+
+    // 500 more profit: the trader gets 80% of 500 only, the firm 20% of 500 plus the 200 owed.
+    g.cash += 500 * USD;
+    let _ = g.request_payout("trader.near".parse().unwrap());
+    let s = g.get_state();
+    assert_eq!(s.paid_to_trader.0, 1_200 * USD);
+    assert_eq!(s.paid_to_firm.0, 300 * USD);
+    assert_eq!(s.cash.0, CAPITAL);
+    let _ = g.on_firm_paid(U128(400 * USD), U128(300 * USD), false, Ok(()));
+    assert_eq!(g.get_state().firm_owed.0, 0);
+}
+
+#[test]
+#[should_panic(expected = "No profit to pay out")]
+fn money_owed_to_the_firm_is_not_profit() {
+    let mut g = guard();
+    g.cash = CAPITAL + 200 * USD;
+    g.day_start_equity = g.cash;
+    g.firm_owed = 200 * USD;
+    ctx(ME);
+    let _ = g.request_payout("trader.near".parse().unwrap());
+}
+
+#[test]
+fn a_closing_account_retries_after_the_trader_leg_fails() {
+    let mut g = guard();
+    g.status = GuardStatus::Closing;
+    g.cash = CAPITAL + 1_000 * USD;
+    let _ = g.poke();
+    assert_eq!(g.get_state().paid_to_trader.0, 800 * USD);
+    let _ = g.on_trader_paid(U128(800 * USD), U128(200 * USD), true, Err(PromiseError::Failed));
+    let s = g.get_state();
+    assert_eq!(s.status, GuardStatus::Closing);
+    assert_eq!(s.cash.0, CAPITAL + 1_000 * USD);
+    assert!(!s.locked);
+}
+
+#[test]
+fn a_failed_capital_return_reopens_the_account() {
+    let mut g = guard();
+    g.status = GuardStatus::Breached;
+    g.cash = 9_000 * USD;
+    let _ = g.poke();
+    assert_eq!(g.get_state().status, GuardStatus::Settled);
+    assert_eq!(g.get_state().cash.0, 0);
+
+    g.on_capital_returned(U128(9_000 * USD), GuardStatus::Breached, Err(PromiseError::Failed));
+    let s = g.get_state();
+    assert!(logged("settle_failed"));
+    assert_eq!(s.status, GuardStatus::Breached);
+    assert_eq!(s.cash.0, 9_000 * USD);
+
+    let _ = g.poke();
+    g.on_capital_returned(U128(9_000 * USD), GuardStatus::Breached, Ok(U128(0)));
+    assert_eq!(g.get_state().status, GuardStatus::Breached);
+    assert_eq!(g.get_state().cash.0, 9_000 * USD);
+
+    let _ = g.poke();
+    g.on_capital_returned(U128(9_000 * USD), GuardStatus::Breached, Ok(U128(9_000 * USD)));
+    assert_eq!(g.get_state().status, GuardStatus::Settled);
+    assert_eq!(g.get_state().cash.0, 0);
+}
+
+#[test]
+fn a_stuck_lock_on_a_closing_account_can_be_cleared() {
+    let mut g = guard();
+    g.status = GuardStatus::Closing;
+    g.locked_at_ns = Some(1);
+    let _ = g.poke(); // Past the TTL: reads balances instead of panicking.
+    g.on_reconciled(vec![U128(CAPITAL), U128(0)]);
+    assert!(!g.get_state().locked);
+    let _ = g.poke();
+    assert_eq!(g.get_state().status, GuardStatus::Settled);
 }
 
 #[test]

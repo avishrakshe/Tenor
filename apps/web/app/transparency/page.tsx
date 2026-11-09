@@ -1,12 +1,12 @@
 import Link from 'next/link';
 import { Stat } from '@/components/ui';
 import { usd, view, type Breach, type Funded, type ReserveState } from '@/lib/chain';
-import { getConfig } from '@/lib/config';
+import { getRequestConfig } from '@/lib/config';
 
 export const dynamic = 'force-dynamic';
 
 export default async function Transparency() {
-  const config = getConfig();
+  const config = await getRequestConfig();
   if (!config.deployed) return <p className="text-sm text-mute">Nothing deployed on {config.network} yet.</p>;
   const tenor = config.stack.tenor;
   const [reserve, funded, breaches] = await Promise.all([

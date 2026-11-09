@@ -9,7 +9,7 @@ import {
 export const BASE_PRICES = { BTC: 75000, ETH: 2200, SOL: 150, NEAR: 3.7 };
 
 /** `fundable` runs create a Guard, which costs the trader its storage and gas budget. */
-export async function setup(label, { fundable = true } = {}) {
+export async function setup(label, { fundable = true, amount } = {}) {
   const near = new Near();
   const dep = loadDeployment(near.network);
   let parent = sponsor(near);
@@ -17,7 +17,7 @@ export async function setup(label, { fundable = true } = {}) {
     const d = JSON.parse(readFileSync(join(ROOT, '.sandbox', 'deployer.json'), 'utf8'));
     parent = near.account(d.accountId, d.secretKey);
   }
-  const trader = await createThrowaway(near, parent, label, near.network === 'sandbox' ? '20' : fundable ? '4.5' : '0.6');
+  const trader = await createThrowaway(near, parent, label, near.network === 'sandbox' ? '30' : amount ?? (fundable ? '4.5' : '0.6'));
   const tenor = dep.demo.tenor;
   const push = (prices) => pushPrices(near, trader.account, dep.demo.oracle, prices);
   const challenge = (id) => near.view(tenor, 'get_challenge', { id });

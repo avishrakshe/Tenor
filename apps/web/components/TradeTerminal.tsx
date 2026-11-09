@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLiveTick } from '@/lib/live';
 import { priceUsd, readQuotes, usd, type LiveQuote, type Position } from '@/lib/chain';
 import { CandleChart } from './Charts';
+import { DemoPrices, usePriceKeeper } from './PriceKeeper';
 import { useSession } from './Session';
 import { Notice, StatusBadge, usePoll } from './ui';
 
@@ -97,6 +98,12 @@ export function TradeTerminal({
   history?: { account: string; receiver: string };
 }) {
   const { config } = useSession();
+  const keeper = usePriceKeeper();
+  const { demo, move, setMove } = keeper;
+  // A funded account should start from market price, not from the move that passed it.
+  useEffect(() => {
+    if (demo && account?.status === 'Passed' && move !== 1) setMove(1);
+  }, [demo, account?.status, move, setMove]);
   const [symbol, setSymbol] = useState('BTC');
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [amount, setAmount] = useState('');
@@ -180,6 +187,8 @@ export function TradeTerminal({
       </div>
 
       {message && <div className="px-1"><Notice tone={message.tone}>{message.text}</Notice></div>}
+      {keeper.problem && <div className="px-1"><Notice tone="error">{keeper.problem} Orders cannot fill until prices are updated.</Notice></div>}
+      {demo && <DemoPrices move={move} setMove={setMove} />}
 
       <div className="grid gap-2 xl:grid-cols-[1fr_240px_330px]">
         <section className="panel !p-0 overflow-hidden" aria-label="Price chart">
@@ -249,8 +258,8 @@ export function TradeTerminal({
                 </div>
               )}
               {gate ?? (
-                <button className="btn mt-4 w-full" disabled={!canTrade || busy || micro === 0n || micro > maxSize}>
-                  {busy ? 'Sending…' : `Buy ${symbol}`}
+                <button className="btn mt-4 w-full" disabled={!canTrade || busy || micro === 0n || micro > maxSize || !q?.fresh}>
+                  {busy ? 'Sending…' : q?.fresh ? `Buy ${symbol}` : 'Waiting for a fresh price'}
                 </button>
               )}
             </form>
@@ -261,7 +270,7 @@ export function TradeTerminal({
                 <Row k="Position" v={position ? `${(Number(position.qty) / 10 ** m.decimals).toPrecision(5)} ${symbol}` : 'None'} />
                 <Row k="Value at bid" v={position ? usd(held) : 'N/A'} />
               </div>
-              {gate ?? <button className="btn mt-4 w-full" disabled={!canTrade || busy || !position} onClick={() => onClose(symbol)}>Close {symbol}</button>}
+              {gate ?? <button className="btn mt-4 w-full" disabled={!canTrade || busy || !position || !q?.fresh} onClick={() => onClose(symbol)}>{q?.fresh || !position ? `Close ${symbol}` : 'Waiting for a fresh price'}</button>}
             </div>
           )}
 

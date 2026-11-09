@@ -5,12 +5,13 @@ import { Checkout } from './Cart';
 import { Nav } from './Nav';
 import { RequireDeployment } from './RequireDeployment';
 import { useSession } from './Session';
+import { WalletDock } from './WalletDock';
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { config } = useSession();
   const landing = pathname === '/';
-  const login = pathname === '/login';
+  const login = pathname.startsWith('/login');
   const terminal = pathname.startsWith('/trade') || pathname.startsWith('/funded');
   const width = landing || login ? '' : terminal ? 'px-2 md:px-3 pb-3' : 'mx-auto max-w-6xl px-4 pb-16 pt-6';
   return (
@@ -30,6 +31,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <main className={`relative z-10 ${width}`}>
         <RequireDeployment>{children}</RequireDeployment>
       </main>
+      {!landing && !login && <WalletDock />}
       <Checkout />
     </div>
   );

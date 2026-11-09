@@ -5,6 +5,8 @@
 *.key
 keys/
 
+.clerk/
+
 # Build output
 target/
 node_modules/
@@ -28,6 +30,7 @@ AGENTS.md
 Thumbs.db
 .sandbox/
 deployments/sandbox.json
+deployments/money-proof.sandbox.json
 submission-draft.md
 .vercel
 .env*

@@ -1,5 +1,6 @@
 'use client';
 
+import { useLoginUser } from '@/lib/login';
 import Link from 'next/link';
 import { Reveal } from '@/components/motion';
 import { useSession } from '@/components/Session';
@@ -9,14 +10,16 @@ import { readQuotes, usd } from '@/lib/chain';
 
 export default function Dashboard() {
   const { config, accountId } = useSession();
+  const user = useLoginUser();
   const accounts = usePoll(() => (accountId ? readAccounts(config.rpc, config.stack.tenor, accountId) : Promise.resolve([])), [accountId, config.stack.tenor], 6000);
   const quotes = usePoll(() => readQuotes(config.rpc, config.stack.oracle), [config.stack.oracle], 6000);
 
   if (!accountId) {
     return (
       <div className="pt-24 text-center">
-        <h1 className="text-3xl font-medium tracking-tight">Log in to see your accounts</h1>
-        <Link className="btn mt-6" href="/login">Log in</Link>
+        <h1 className="text-3xl font-medium tracking-tight">Welcome{user?.firstName ? `, ${user.firstName}` : ''}</h1>
+        {user?.primaryEmailAddress && <p className="mt-2 text-sm text-mute">Signed in as {user.primaryEmailAddress.emailAddress}</p>}
+        <p className="mt-6 text-mute">Connect your NEAR wallet at the bottom right to see your accounts and start trading.</p>
       </div>
     );
   }

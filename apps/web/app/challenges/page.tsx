@@ -34,7 +34,7 @@ const STEPS = [
 ];
 
 export default function Challenges() {
-  const { config, accountId, send, signIn } = useSession();
+  const { config, accountId, send, connect } = useSession();
   const { add, sizeInCart } = useCart();
   const router = useRouter();
   const tenor = config.stack.tenor;
@@ -51,10 +51,10 @@ export default function Challenges() {
   );
 
   async function demo() {
-    if (!accountId) return router.push('/login');
     setBusy(true);
     setMsg(null);
     try {
+      if (!accountId) return await connect();
       const r = (await send({ receiverId: tenor, method: 'claim_demo', args: {}, gas: '30000000000000' })) as { status?: { Failure?: unknown } };
       if (r?.status?.Failure) setMsg('You have already claimed your free demo.');
       else router.push('/dashboard');
@@ -64,7 +64,6 @@ export default function Challenges() {
       setBusy(false);
     }
   }
-  void signIn;
 
   return (
     <div className="space-y-10">

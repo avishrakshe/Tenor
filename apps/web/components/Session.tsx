@@ -1,6 +1,7 @@
 'use client';
 
-// The signed-in trader. On testnet this is a NEAR wallet through near-connect, with a
+// The connected trading account; login itself is Google, through Clerk.
+// On testnet this is a NEAR wallet through near-connect, with a
 // function-call key for evaluation trading so orders need no popups:
 // https://docs.near.org/web3-apps/tutorials/wallet-login
 // On a local sandbox, where no wallet exists, a throwaway account signs instead.
@@ -13,8 +14,8 @@ export type Call = { receiverId: string; method: string; args: object; deposit?:
 type Session = {
   config: AppConfig;
   accountId: string | null;
-  signIn: () => Promise<void>;
-  signOut: () => Promise<void>;
+  connect: () => Promise<void>;
+  disconnect: () => Promise<void>;
   send: (call: Call) => Promise<unknown>;
   sendMany: (calls: Call[]) => Promise<unknown[]>;
 };
@@ -102,7 +103,7 @@ export function SessionProvider({ config, children }: { config: AppConfig; child
     };
   }, [sandbox, config.deployed, config.stack.tenor]);
 
-  const signIn = useCallback(async () => {
+  const connect = useCallback(async () => {
     if (sandbox) {
       const res = await fetch('/api/dev/account', { method: 'POST' });
       if (!res.ok) throw new Error(await res.text());
@@ -114,7 +115,7 @@ export function SessionProvider({ config, children }: { config: AppConfig; child
     await connector.current?.connect();
   }, [sandbox]);
 
-  const signOut = useCallback(async () => {
+  const disconnect = useCallback(async () => {
     if (sandbox) {
       try {
         localStorage.removeItem(SANDBOX_KEY);
@@ -173,8 +174,8 @@ export function SessionProvider({ config, children }: { config: AppConfig; child
   );
 
   const value = useMemo(
-    () => ({ config, accountId, signIn, signOut, send, sendMany }),
-    [config, accountId, signIn, signOut, send, sendMany],
+    () => ({ config, accountId, connect, disconnect, send, sendMany }),
+    [config, accountId, connect, disconnect, send, sendMany],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

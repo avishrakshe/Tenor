@@ -24,6 +24,7 @@ const GAS_BALANCE: Gas = Gas::from_tgas(5);
 const GAS_ON_BALANCES: Gas = Gas::from_tgas(15);
 const GAS_FT_TRANSFER: Gas = Gas::from_tgas(15);
 const GAS_FT_RETURN: Gas = Gas::from_tgas(60);
+const GAS_ON_RETURNED: Gas = Gas::from_tgas(8);
 const GAS_ON_FIRM_PAID: Gas = Gas::from_tgas(75);
 const GAS_ON_TRADER_PAID: Gas = Gas::from_tgas(95);
 const GAS_STORAGE: Gas = Gas::from_tgas(10);
@@ -137,6 +138,7 @@ pub struct GuardView {
     pub locked: bool,
     pub paid_to_trader: U128,
     pub paid_to_firm: U128,
+    pub firm_owed: U128,
     pub markets: Vec<MarketCfg>,
     pub approved_recipients: Vec<AccountId>,
 }
@@ -172,6 +174,9 @@ pub struct Guard {
     key_allowance: NearToken,
     paid_to_trader: u128,
     paid_to_firm: u128,
+    /// The firm's share of an earlier payout that failed to send. It sits in `cash` but is not
+    /// profit, so it must never be split again.
+    firm_owed: u128,
     approved_recipients: Vec<AccountId>,
 }
 
@@ -264,6 +269,7 @@ impl Guard {
             key_allowance: init.key_allowance,
             paid_to_trader: 0,
             paid_to_firm: 0,
+            firm_owed: 0,
             approved_recipients: Vec::new(),
         }
     }
@@ -369,10 +375,10 @@ impl Guard {
             self.breach(reason, self.cash);
             return self.settle();
         }
-        require!(self.cash > self.initial_balance, "No profit to pay out");
-        let profit = self.cash - self.initial_balance;
+        let profit = self.payable_profit();
+        require!(profit > 0, "No profit to pay out");
         let (trader, firm) = rule(rules::split_profit(profit));
-        self.pay(recipient, trader, firm, false)
+        self.pay(recipient, trader, firm + self.firm_owed, false)
     }
 
     /// Permissionless: applies TP/SL, UTC rollover and breaches, and advances liquidation.
@@ -384,14 +390,15 @@ impl Guard {
             ),
             "Nothing to do"
         );
-        if self.is_flat_and_finishing() {
-            self.require_unlocked();
-            return self.settle();
-        }
+        // Before the flat check, or a stuck lock on a closing account could never be cleared.
         if let Some(at) = self.locked_at_ns {
             if env::block_timestamp().saturating_sub(at) > LOCK_TTL_NS {
                 return self.reconcile();
             }
+        }
+        if self.is_flat_and_finishing() {
+            self.require_unlocked();
+            return self.settle();
         }
         self.start(Action::Poke)
     }
@@ -576,11 +583,16 @@ impl Guard {
         firm_amount: U128,
         settle_after: bool,
         #[callback_result] paid: Result<(), PromiseError>,
-    ) -> Promise {
+    ) -> PromiseOrValue<()> {
         if paid.is_err() {
-            self.restore_payout(trader_amount.0);
+            // Pay nobody, so a retry splits the same profit 80/20. A closing account stays
+            // Closing and flat, so `poke` tries again.
+            self.locked_at_ns = None;
+            self.restore_payout(trader_amount.0 + firm_amount.0);
             self.paid_to_trader -= trader_amount.0;
+            self.paid_to_firm -= firm_amount.0;
             event("payout_failed", json!({ "leg": "trader" }));
+            return PromiseOrValue::Value(());
         }
         ft_call(
             &self.usdc.clone(),
@@ -593,6 +605,7 @@ impl Guard {
                 .with_static_gas(GAS_ON_FIRM_PAID)
                 .on_firm_paid(trader_amount, firm_amount, settle_after),
         )
+        .into()
     }
 
     #[private]
@@ -607,14 +620,35 @@ impl Guard {
         if paid.is_err() {
             self.restore_payout(firm_amount.0);
             self.paid_to_firm -= firm_amount.0;
+            self.firm_owed = firm_amount.0;
             event("payout_failed", json!({ "leg": "firm" }));
         } else {
+            self.firm_owed = 0;
             event("payout", json!({ "trader": trader_amount, "firm": firm_amount }));
         }
         if settle_after {
             return PromiseOrValue::Promise(self.return_capital());
         }
         PromiseOrValue::Value(())
+    }
+
+    /// `ft_transfer_call` refunds a failed return to this account, so anything not accepted goes
+    /// back on the book and the account reopens for `poke` instead of stranding the money.
+    #[private]
+    pub fn on_capital_returned(
+        &mut self,
+        amount: U128,
+        prior: GuardStatus,
+        #[callback_result] used: Result<U128, PromiseError>,
+    ) {
+        let returned = used.map_or(0, |u| u.0);
+        if returned >= amount.0 {
+            event("settled", json!({ "returned": amount }));
+            return;
+        }
+        self.cash = amount.0 - returned;
+        self.status = prior;
+        event("settle_failed", json!({ "amount": amount, "returned": U128(returned) }));
     }
 
     pub fn get_state(&self) -> GuardView {
@@ -637,6 +671,7 @@ impl Guard {
             locked: self.locked_at_ns.is_some(),
             paid_to_trader: U128(self.paid_to_trader),
             paid_to_firm: U128(self.paid_to_firm),
+            firm_owed: U128(self.firm_owed),
             markets: self.markets.clone(),
             approved_recipients: self.approved_recipients.clone(),
         }
@@ -656,6 +691,11 @@ impl Guard {
             env::predecessor_account_id() == self.trader,
             "Only the trader's own wallet"
         );
+    }
+
+    /// Cash above the capital line that is really the trader's and firm's to split.
+    fn payable_profit(&self) -> u128 {
+        self.cash.saturating_sub(self.initial_balance + self.firm_owed)
     }
 
     fn flat_breach_reason(&self) -> Option<&'static str> {
@@ -920,20 +960,20 @@ impl Guard {
 
     /// Flat and finished. A closing trader gets their 80% first; a breached account forfeits.
     fn settle(&mut self) -> Promise {
-        if self.status == GuardStatus::Closing && self.cash > self.initial_balance {
-            let profit = self.cash - self.initial_balance;
+        let profit = self.payable_profit();
+        if self.status == GuardStatus::Closing && profit > 0 {
             let (trader, firm) = rule(rules::split_profit(profit));
-            return self.pay(self.trader.clone(), trader, firm, true);
+            return self.pay(self.trader.clone(), trader, firm + self.firm_owed, true);
         }
         self.return_capital()
     }
 
     fn return_capital(&mut self) -> Promise {
-        let was_closing = self.status == GuardStatus::Closing;
+        let prior = self.status.clone();
+        let was_closing = prior == GuardStatus::Closing;
         let amount = self.cash;
         self.cash = 0;
         self.status = GuardStatus::Settled;
-        event("settled", json!({ "returned": U128(amount) }));
         let done = ft_call(
             &self.usdc.clone(),
             "ft_transfer_call",
@@ -943,6 +983,11 @@ impl Guard {
                 "msg": json!({ "action": "guard_return" }).to_string(),
             }),
             GAS_FT_RETURN,
+        )
+        .then(
+            Self::ext(env::current_account_id())
+                .with_static_gas(GAS_ON_RETURNED)
+                .on_capital_returned(U128(amount), prior),
         );
         if was_closing {
             // A breach already removed the key; a normal close removes it here.

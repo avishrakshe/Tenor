@@ -1,5 +1,6 @@
 'use client';
 
+import { useClerk, useUser } from '@clerk/nextjs';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { CartButton } from './Cart';
@@ -13,15 +14,46 @@ const APP_LINKS = [
   ['/analytics', 'Analytics'],
   ['/leaderboard', 'Leaderboard'],
   ['/transparency', 'Transparency'],
+  ['/proof', 'Money proof'],
   ['/safety', 'Safety'],
 ];
 
+function StackSwitch() {
+  const { config } = useSession();
+  const demo = config.stackName === 'demo';
+  function flip() {
+    document.cookie = `tenor.stack=${demo ? 'live' : 'demo'}; path=/; max-age=2592000; samesite=lax`;
+    window.location.reload();
+  }
+  return (
+    <button className="btn btn-ghost !min-h-9" aria-pressed={demo} title="The demo stack uses the same contracts with prices anyone can set" onClick={flip}>
+      {demo ? 'Demo mode: on' : 'Demo mode: off'}
+    </button>
+  );
+}
+
 function Account() {
-  const { accountId, signOut } = useSession();
-  if (accountId) {
+  const { isLoaded, user } = useUser();
+  const clerk = useClerk();
+  const { accountId, disconnect } = useSession();
+
+  async function signOut() {
+    try {
+      // A wallet left connected would carry over to the next person to log in on this browser.
+      if (accountId) await disconnect();
+    } finally {
+      await clerk.signOut({ redirectUrl: '/' });
+    }
+  }
+
+  if (!isLoaded) return null;
+  if (user) {
+    const email = user.primaryEmailAddress?.emailAddress;
     return (
-      <button className="btn btn-ghost num max-w-44 truncate" onClick={signOut} title="Sign out">
-        {accountId}
+      <button className="btn btn-ghost max-w-56 gap-2" onClick={signOut} title={`Sign out of ${email ?? 'your account'}`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={user.imageUrl} alt="" width={20} height={20} className="rounded-full" />
+        <span className="truncate">{user.firstName ?? email}</span>
       </button>
     );
   }
@@ -34,7 +66,8 @@ function Account() {
 
 export function Nav() {
   const pathname = usePathname();
-  if (pathname === '/login') return null;
+  const { config } = useSession();
+  if (pathname.startsWith('/login')) return null;
 
   if (pathname === '/') {
     return (
@@ -68,8 +101,9 @@ export function Nav() {
           </Link>
         ))}
         <div className="ml-auto flex items-center gap-3">
+          <StackSwitch />
           <CartButton />
-          <Account />
+          {config.network !== 'sandbox' && <Account />}
         </div>
       </nav>
     </header>

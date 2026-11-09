@@ -19,8 +19,8 @@ export default function Analytics() {
   if (!accountId) {
     return (
       <div className="pt-24 text-center">
-        <h1 className="text-3xl font-medium tracking-tight">Log in to see your analytics</h1>
-        <Link className="btn mt-6" href="/login">Log in</Link>
+        <h1 className="text-3xl font-medium tracking-tight">Connect your wallet to see your analytics</h1>
+        <p className="mt-6 text-mute">Use the button at the bottom right.</p>
       </div>
     );
   }

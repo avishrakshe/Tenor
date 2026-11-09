@@ -1,10 +1,11 @@
+import { ClerkProvider } from '@clerk/nextjs';
 import { GeistMono } from 'geist/font/mono';
 import { GeistSans } from 'geist/font/sans';
 import type { Metadata } from 'next';
 import { CartProvider } from '@/components/Cart';
 import { SessionProvider } from '@/components/Session';
 import { Shell } from '@/components/Shell';
-import { getConfig } from '@/lib/config';
+import { getRequestConfig } from '@/lib/config';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -14,15 +15,19 @@ export const metadata: Metadata = {
 
 export const dynamic = 'force-dynamic';
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const config = await getRequestConfig();
+  const app = (
+    <SessionProvider config={config}>
+      <CartProvider>
+        <Shell>{children}</Shell>
+      </CartProvider>
+    </SessionProvider>
+  );
   return (
     <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body>
-        <SessionProvider config={getConfig()}>
-          <CartProvider>
-            <Shell>{children}</Shell>
-          </CartProvider>
-        </SessionProvider>
+        {config.network === 'sandbox' ? app : <ClerkProvider signInUrl="/login">{app}</ClerkProvider>}
       </body>
     </html>
   );
