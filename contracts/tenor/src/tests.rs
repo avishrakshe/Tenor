@@ -150,6 +150,84 @@ fn order_fills_with_fee_and_marks_at_bid() {
 }
 
 #[test]
+fn two_orders_in_one_market_stay_separate_trades() {
+    let mut t = tenor();
+    ctx("a.near", 0);
+    let id = t.claim_demo();
+    t.on_prices(id, order(1_000 * USD), prices(PX));
+    t.on_prices(id, order(500 * USD), prices(PX * 2));
+    let c = t.get_challenge(id).unwrap();
+    assert_eq!(c.positions.len(), 2);
+    assert_eq!(c.positions[0].cost.0, 1_000 * USD);
+    assert_eq!(c.positions[1].cost.0, 500 * USD);
+    assert_eq!(c.cash.0, 8_500 * USD);
+}
+
+#[test]
+fn closing_one_trade_leaves_the_other_open() {
+    let mut t = tenor();
+    ctx("a.near", 0);
+    let id = t.claim_demo();
+    t.on_prices(id, order(1_000 * USD), prices(PX));
+    t.on_prices(id, order(500 * USD), prices(PX));
+    let second = t.get_challenge(id).unwrap().positions[1].qty;
+    t.on_prices(id, EvalAction::Close { symbol: "BTC".into(), qty: Some(second) }, prices(PX));
+    let c = t.get_challenge(id).unwrap();
+    assert_eq!(c.positions.len(), 1);
+    assert_eq!(c.positions[0].cost.0, 1_000 * USD);
+
+    t.on_prices(id, EvalAction::Close { symbol: "BTC".into(), qty: None }, prices(PX));
+    assert!(t.get_challenge(id).unwrap().positions.is_empty());
+}
+
+#[test]
+fn closing_a_trade_that_does_not_exist_changes_nothing() {
+    let mut t = tenor();
+    ctx("a.near", 0);
+    let id = t.claim_demo();
+    t.on_prices(id, order(1_000 * USD), prices(PX));
+    t.on_prices(id, EvalAction::Close { symbol: "BTC".into(), qty: Some(U128(7)) }, prices(PX));
+    assert_eq!(t.get_challenge(id).unwrap().positions.len(), 1);
+}
+
+#[test]
+fn the_position_cap_counts_every_trade_in_the_market() {
+    let mut t = tenor();
+    ctx("a.near", 0);
+    let id = t.claim_demo();
+    t.on_prices(id, order(6_000 * USD), prices(PX));
+    t.on_prices(id, order(4_500 * USD), prices(PX));
+    assert_eq!(t.get_challenge(id).unwrap().positions.len(), 1);
+}
+
+#[test]
+fn open_trades_are_capped() {
+    let mut t = tenor();
+    ctx("a.near", 0);
+    let id = t.claim_demo();
+    for _ in 0..21 {
+        t.on_prices(id, order(10 * USD), prices(PX));
+    }
+    let c = t.get_challenge(id).unwrap();
+    assert_eq!(c.positions.len(), 20);
+    assert_eq!(c.cash.0, 9_800 * USD);
+}
+
+#[test]
+fn each_trade_keeps_its_own_stop() {
+    let mut t = tenor();
+    ctx("a.near", 0);
+    let id = t.claim_demo();
+    let stop = EvalAction::Order { symbol: "BTC".into(), usdc: U128(1_000 * USD), tp_e8: None, sl_e8: Some(U128(95 * 100_000_000)) };
+    t.on_prices(id, stop, prices(PX));
+    t.on_prices(id, order(1_000 * USD), prices(PX));
+    t.on_prices(id, EvalAction::Poke, prices(PX * 94 / 100));
+    let c = t.get_challenge(id).unwrap();
+    assert_eq!(c.positions.len(), 1);
+    assert_eq!(c.positions[0].sl_e8, None);
+}
+
+#[test]
 fn over_the_cap_order_is_rejected_without_a_fill() {
     let mut t = tenor();
     ctx("a.near", 0);

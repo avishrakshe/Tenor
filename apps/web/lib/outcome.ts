@@ -4,6 +4,7 @@ const REJECTIONS: Record<string, string> = {
   notional_cap: 'it is above the position cap for this market',
   insufficient_cash: 'the account does not have enough cash',
   no_position: 'there is no open position to close',
+  too_many_positions: 'this account already has 20 open trades',
 };
 
 function events(r: Outcome): { event: string; data?: { reason?: string; leg?: string }[] }[] {
@@ -30,6 +31,7 @@ export function outcomeMessage(result: unknown, ok: string): { tone: 'info' | 'e
       const reason = e.data?.[0]?.reason ?? '';
       return { tone: 'error', text: `Order rejected: ${REJECTIONS[reason] ?? reason}.` };
     }
+    if (e.event === 'nothing_to_close') return { tone: 'error', text: 'That trade is no longer open, so nothing was sold.' };
     if (e.event === 'order_rejected_by_venue') return { tone: 'error', text: 'The swap venue refused this order, usually because the price moved. Nothing was spent.' };
     if (e.event === 'payout_failed' && e.data?.[0]?.leg === 'trader') return { tone: 'error', text: 'The payout could not be sent. The money is still in this account and nobody was paid.' };
   }

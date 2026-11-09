@@ -78,9 +78,9 @@ export default function Trade({ params }: { params: Promise<{ accountId: string 
           send({ receiverId: tenor, method: 'place_order', args: { challenge_id: id, symbol, usdc, tp_e8: tp, sl_e8: sl } }),
         )
       }
-      onClose={(symbol) => {
+      onClose={(symbol, qty) => {
         const target = symbol ?? c.positions[0]?.symbol;
-        if (target) act('Position closed.', () => send({ receiverId: tenor, method: 'close_position', args: { challenge_id: id, symbol: target } }));
+        if (target) act('Trade closed.', () => send({ receiverId: tenor, method: 'close_position', args: { challenge_id: id, symbol: target, qty } }));
       }}
       actions={
         c.status === 'Passed' ? (

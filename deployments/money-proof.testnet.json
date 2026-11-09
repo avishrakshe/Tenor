@@ -1,13 +1,13 @@
 {
   "network": "testnet",
   "stack": "demo",
-  "ranAt": "2026-11-09T20:57:11.407Z",
+  "ranAt": "2026-11-09T22:27:55.452Z",
   "ok": true,
   "tenor": "demo.tenor.testnet",
-  "trader": "money-mw9qmlrm.tenor-judge-mw9qmi6q.testnet",
+  "trader": "money-mw9tux8c.tenor-judge-mw9tuthf.testnet",
   "guards": [
-    "6.demo.tenor.testnet",
-    "7.demo.tenor.testnet"
+    "8.demo.tenor.testnet",
+    "9.demo.tenor.testnet"
   ],
   "summary": {
     "feesPaid": "72000000",
@@ -21,7 +21,7 @@
       "title": "Faucet: the trader gets test USDC",
       "ok": true,
       "txs": [
-        "https://testnet.nearblocks.io/txns/7mvVSvHinvxmikUvVjhaEM1GQvuXAXVt6ETwXweAQ24N"
+        "https://testnet.nearblocks.io/txns/FUQeXFwTB8jNL5f3udcDX7EMYttR2BS5c7n8bjpMR8ju"
       ],
       "deltas": {
         "trader": "1000000000",
@@ -33,7 +33,7 @@
       "title": "Buy classic-1-5000: the fee goes to the risk reserve",
       "ok": true,
       "txs": [
-        "https://testnet.nearblocks.io/txns/31E4X8bxLdrh4XyqBmu1FRX3ShJH3YeEvm47Y6gAXo7R"
+        "https://testnet.nearblocks.io/txns/GNzsdNgPfzMi3u6NRQ2BJ5BmF7K9Wr1FVncaUvier7qn"
       ],
       "deltas": {
         "trader": "-36000000",
@@ -46,8 +46,8 @@
       "title": "Pass the evaluation on paper: no real money may move",
       "ok": true,
       "txs": [
-        "https://testnet.nearblocks.io/txns/3f5xJLn48ZjDzxvgTyxu5PwaySgJ4akiKQkaF6AC9fAW",
-        "https://testnet.nearblocks.io/txns/3gJkCZ6fDXKMDmL5kC2qCx8XCtkiZXFQKwkdm992SSwD"
+        "https://testnet.nearblocks.io/txns/36iMLZWWe2FXs6rBCok7o1MRby6TRNqp7xfJgA38KVHb",
+        "https://testnet.nearblocks.io/txns/7UcLf9ytFnqA9Ve2hSD6xAnguwDZYKDj5jYSN7cYAUfr"
       ],
       "deltas": {}
     },
@@ -56,7 +56,7 @@
       "title": "fund(): capital leaves the vault for a new Guard account",
       "ok": true,
       "txs": [
-        "https://testnet.nearblocks.io/txns/3SpKiDTnkYVtN7SRSywvAKNQupPFjAhiNbEAsjMFQpXc"
+        "https://testnet.nearblocks.io/txns/GuKSooJZn12xvK6ZeqMddiVAizV9oVweLwpLYch9QT2o"
       ],
       "deltas": {
         "tenor": "-5000000000",
@@ -71,7 +71,7 @@
       "title": "Swap all capital into BTC at $75000: USDC goes to the venue",
       "ok": true,
       "txs": [
-        "https://testnet.nearblocks.io/txns/3GmDyNzLiMSTXZQ9d6PYLKKSCmP3km1JkMTK4KoVV4da"
+        "https://testnet.nearblocks.io/txns/Bw9SKNei7s1BN2Kzcj87a8p8qgeDJJWuTTG43uX5BwT8"
       ],
       "deltas": {
         "venue": "5000000000",
@@ -83,7 +83,7 @@
       "title": "BTC +2%: sell, and the proceeds return to the Guard",
       "ok": true,
       "txs": [
-        "https://testnet.nearblocks.io/txns/E7W5PRhEbUDQQE58CUBUb3s7qSg5mCVnCFJJspHVDLEJ"
+        "https://testnet.nearblocks.io/txns/2buv2h1DqHX2NmwEgVAWYXKj5M7D5QLiienppZ3DcGNT"
       ],
       "deltas": {
         "guard1": "5091844537",
@@ -95,7 +95,7 @@
       "title": "Payout: $91.84 profit splits 80/20, capital stays put",
       "ok": true,
       "txs": [
-        "https://testnet.nearblocks.io/txns/5ZcwfpDtmV1rRpEARYkZCoQRK4Zv1135tzFsSuMbfCSZ"
+        "https://testnet.nearblocks.io/txns/9DrzSRFwqVpW8dWKosLmwwBLwgdBPK7xNgKhz44Wqbzy"
       ],
       "deltas": {
         "trader": "73475629",
@@ -108,7 +108,7 @@
       "title": "The trade-only key tries to pay a stranger: nothing may move",
       "ok": true,
       "txs": [
-        "https://testnet.nearblocks.io/txns/B2i27SJSiyDDCnLt5xW6gVXQ7J6WeQxWnRKFH3E2kMNU"
+        "https://testnet.nearblocks.io/txns/3G3UoH3gVuUVKe29412tj3ng7YBbh3UKj7c13UEEUKu1"
       ],
       "deltas": {}
     },
@@ -117,7 +117,7 @@
       "title": "Swap all capital into BTC at $76500: USDC goes to the venue",
       "ok": true,
       "txs": [
-        "https://testnet.nearblocks.io/txns/HNcYKkVyJ1xnAYk7C2aLMeY5F4bDoNQs3Z5SyaUhu5p4"
+        "https://testnet.nearblocks.io/txns/6uXUeb7VnMa9ZKtSsvoEpJWDLNuQGrCAwvGKe9ocY79G"
       ],
       "deltas": {
         "venue": "5000000000",
@@ -129,8 +129,8 @@
       "title": "Trader ends the account: profit splits, all capital returns to the vault",
       "ok": true,
       "txs": [
-        "https://testnet.nearblocks.io/txns/5UHSxVX2cL8WKxoymHLUVM65xkd2iMByqWNjgkh6CNf4",
-        "https://testnet.nearblocks.io/txns/8EoihvFrJGsGCVKgULEv6ErWJWCLnJ9XfdtSkEPaPND7"
+        "https://testnet.nearblocks.io/txns/3ZtCZQqLveqHu8wKgHykEVqqfoL6yV9nxgjZC63xapU3",
+        "https://testnet.nearblocks.io/txns/2D4NPbsNvpqEJYc7XFYnfYSHwHGSG99VrahL4yYqeiZa"
       ],
       "deltas": {
         "trader": "33539836",
@@ -147,7 +147,7 @@
       "title": "Buy classic-1-5000: the fee goes to the risk reserve",
       "ok": true,
       "txs": [
-        "https://testnet.nearblocks.io/txns/Axj9iE2qwbuteGVd7H8wz3cxyJW2yAG7mLyNqzsRJjqR"
+        "https://testnet.nearblocks.io/txns/4tnk8VYWwfVbwddnV3Ri7cG2Pj4DDy5BLU6pvKt92W5e"
       ],
       "deltas": {
         "trader": "-36000000",
@@ -160,8 +160,8 @@
       "title": "Pass the evaluation on paper: no real money may move",
       "ok": true,
       "txs": [
-        "https://testnet.nearblocks.io/txns/FgqdzfwNjATPkaA3pZLAZ7Ugop7PQoTPtYLRY2haKfcu",
-        "https://testnet.nearblocks.io/txns/D66iFv8hECUZUURkQC15NH1nBGrkYULNyP3SpKXGBo8L"
+        "https://testnet.nearblocks.io/txns/4ZDvfRKH4KRe6MTyxwjKFGJtVkgao9Z8tNY4RrKzUiQA",
+        "https://testnet.nearblocks.io/txns/73sjnnjR7omEEAsRNDmbMeA3jVDJSXzoPRCSH7q9xZnk"
       ],
       "deltas": {}
     },
@@ -170,7 +170,7 @@
       "title": "fund(): capital leaves the vault for a new Guard account",
       "ok": true,
       "txs": [
-        "https://testnet.nearblocks.io/txns/7xqixWbVdgHx8X9niLonYYy6wye1LfDrStBenP15pLN7"
+        "https://testnet.nearblocks.io/txns/GcrvDAaMo4UZFUrLN9KzYkhAQt3UEXN85zudVLay9fNq"
       ],
       "deltas": {
         "tenor": "-5000000000",
@@ -185,7 +185,7 @@
       "title": "Swap all capital into BTC at $75000: USDC goes to the venue",
       "ok": true,
       "txs": [
-        "https://testnet.nearblocks.io/txns/4SA3Wmi1J82evFpvgg6FFPALZS1RYKxgU2pKBuwwmB2B"
+        "https://testnet.nearblocks.io/txns/D8HwXWTeqPBcNJH87iamAAb5ssjxLPWvo3QJ3c9CfjpL"
       ],
       "deltas": {
         "venue": "5000000000",
@@ -197,8 +197,8 @@
       "title": "BTC -4%: breach, forced sale, and the reserve covers the $207.68 loss",
       "ok": true,
       "txs": [
-        "https://testnet.nearblocks.io/txns/2PywuBD8nZ3Fno2DnDnyCZmriG3KhbmoZX7LF7bP3FNC",
-        "https://testnet.nearblocks.io/txns/2kXReaahF2hwCn7WEZvbYZA1gTyeLidxgGuKDV7RAzrH"
+        "https://testnet.nearblocks.io/txns/HtvT4GyTo9DRcv33i98pTKiAkguwN5HreKzwDRrc32KC",
+        "https://testnet.nearblocks.io/txns/7ionPigzoYizQh51EwS1YVtezrmdtkM71vB1K1r1KWXj"
       ],
       "deltas": {
         "tenor": "4792324270",

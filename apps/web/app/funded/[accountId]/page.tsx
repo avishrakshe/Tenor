@@ -109,7 +109,7 @@ export default function FundedPage({ params }: { params: Promise<{ accountId: st
       busy={busy}
       message={msg ?? (!traderKey && active ? { tone: 'info', text: 'This browser does not hold the trader key for this account, so it is read-only here.' } : null)}
       onBuy={(symbol, usdc, tp, sl) => trade('Swap executed. The book is rebuilt from token balances.', { method: 'place_order', args: { symbol, usdc, tp_e8: tp, sl_e8: sl } })}
-      onClose={(symbol) => trade('Position sold.', { method: 'close_position', args: { symbol } })}
+      onClose={(symbol, qty) => trade('Trade sold.', { method: 'close_position', args: { symbol, qty } })}
       actions={
         <>
           {canTrade && (

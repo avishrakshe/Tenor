@@ -26,6 +26,17 @@ for (const tenor of [dep.live.tenor, dep.demo.tenor]) {
 }
 dep.guardHash = bs58.encode(createHash('sha256').update(guardCode).digest());
 
+// Replaces the Tenor contract's code and keeps its state. Only for changes that leave the stored
+// data format alone. Usage: npm run update:contracts -- --network testnet --tenor
+if (process.argv.includes('--tenor')) {
+  const code = wasm('tenor');
+  for (const tenor of [dep.live.tenor, dep.demo.tenor]) {
+    const signer = tenor === root.accountId ? root : near.account(tenor, secretKey);
+    must(await near.send(signer, tenor, [actions.deployContract(code)]), `deploy ${tenor}`);
+    see('contract code updated', tenor);
+  }
+}
+
 const id = `blocklist.${dep.root}`;
 if (!(await near.exists(id))) {
   const code = wasm('tenor_blocklist');

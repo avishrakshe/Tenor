@@ -50,7 +50,7 @@ function positionValue(p: Position, quotes: Record<string, LiveQuote> | null) {
   return q ? markValue(BigInt(p.qty), q, market(p.symbol).decimals) : null;
 }
 
-/** Bid at which this position alone takes equity to `targetEquity`. */
+/** Bid at which this market takes equity to `targetEquity`. Every trade in it moves together. */
 function priceForEquity(a: TerminalAccount, p: Position, quotes: Record<string, LiveQuote> | null, targetEquity: bigint) {
   let others = a.cash;
   for (const o of a.positions) {
@@ -59,7 +59,8 @@ function priceForEquity(a: TerminalAccount, p: Position, quotes: Record<string, 
     if (v === null) return null;
     others += v;
   }
-  const units = Number(BigInt(p.qty)) / 10 ** market(p.symbol).decimals;
+  const qty = a.positions.filter((o) => o.symbol === p.symbol).reduce((s, o) => s + BigInt(o.qty), 0n);
+  const units = Number(qty) / 10 ** market(p.symbol).decimals;
   return units > 0 ? Number(targetEquity - others) / 1e6 / units : null;
 }
 
@@ -91,7 +92,8 @@ export function TradeTerminal({
   message: { tone: 'info' | 'error'; text: string } | null;
   gate?: React.ReactNode;
   onBuy: (symbol: string, usdc: string, tp: string | null, sl: string | null) => void;
-  onClose: (symbol: string | null) => void;
+  /** `qty` picks one trade, because each order is its own position. */
+  onClose: (symbol: string | null, qty?: string) => void;
   actions?: React.ReactNode;
   children?: React.ReactNode;
   /** Whose signed transactions to list, and which contract they called. */
@@ -134,8 +136,10 @@ export function TradeTerminal({
   }, [account, quotes]);
 
   const m = market(symbol);
-  const position = account?.positions.find((p) => p.symbol === symbol) ?? null;
-  const held = position ? (positionValue(position, quotes ?? null) ?? 0n) : 0n;
+  const trades = account?.positions.filter((p) => p.symbol === symbol) ?? [];
+  const heldQty = trades.reduce((s, p) => s + BigInt(p.qty), 0n);
+  const held = q && heldQty > 0n ? markValue(heldQty, q, m.decimals) : 0n;
+  const heldLabel = `${(Number(heldQty) / 10 ** m.decimals).toPrecision(5)} ${symbol}${trades.length > 1 ? ` in ${trades.length} trades` : ''}`;
   const cap = equity === null ? null : (equity * m.capBps) / 10_000n;
   const maxSize = account && cap !== null ? (() => {
     const room = cap > held ? cap - held : 0n;
@@ -246,7 +250,7 @@ export function TradeTerminal({
               <div className="mt-4">
                 <Row k="Available to trade" v={account ? usd(account.cash) : 'N/A'} />
                 <Row k="Max size" v={account ? usd(maxSize) : 'N/A'} />
-                <Row k="Current position" v={position ? `${(Number(position.qty) / 10 ** m.decimals).toPrecision(5)} ${symbol}` : `0 ${symbol}`} />
+                <Row k="Current position" v={trades.length ? heldLabel : `0 ${symbol}`} />
               </div>
               <label className="mt-3 flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-line px-3 text-sm">
                 <input type="checkbox" checked={tpsl} onChange={(e) => setTpsl(e.target.checked)} /> Take Profit / Stop Loss
@@ -265,12 +269,12 @@ export function TradeTerminal({
             </form>
           ) : (
             <div className="mt-6">
-              <p className="text-sm text-mute">Tenor is spot only: you can hold an asset or be flat, so selling closes your position.</p>
+              <p className="text-sm text-mute">Tenor is spot only: selling closes a trade. Every buy is its own trade, so use the table below to close a specific one.</p>
               <div className="mt-4">
-                <Row k="Position" v={position ? `${(Number(position.qty) / 10 ** m.decimals).toPrecision(5)} ${symbol}` : 'None'} />
-                <Row k="Value at bid" v={position ? usd(held) : 'N/A'} />
+                <Row k="Position" v={trades.length ? heldLabel : 'None'} />
+                <Row k="Value at bid" v={trades.length ? usd(held) : 'N/A'} />
               </div>
-              {gate ?? <button className="btn mt-4 w-full" disabled={!canTrade || busy || !position || !q?.fresh} onClick={() => onClose(symbol)}>{q?.fresh || !position ? `Close ${symbol}` : 'Waiting for a fresh price'}</button>}
+              {gate ?? <button className="btn mt-4 w-full" disabled={!canTrade || busy || !trades.length || !q?.fresh} onClick={() => onClose(symbol, trades[0].qty)}>{q?.fresh || !trades.length ? `Close ${trades.length > 1 ? 'oldest ' : ''}${symbol}${trades.length > 1 ? ' trade' : ''}` : 'Waiting for a fresh price'}</button>}
             </div>
           )}
 
@@ -292,7 +296,7 @@ export function TradeTerminal({
                 </button>
               ))}
             </div>
-            {tab === 'positions' && account && account.positions.length > 0 && <button className="text-sm text-mute underline underline-offset-2 hover:text-text" disabled={!canTrade || busy} onClick={() => onClose(null)}>Close next</button>}
+            {tab === 'positions' && account && account.positions.length > 0 && <button className="text-sm text-mute underline underline-offset-2 hover:text-text" disabled={!canTrade || busy} onClick={() => onClose(account.positions[0].symbol, account.positions[0].qty)}>Close oldest</button>}
           </div>
           {tab === 'history' ? (
             <History history={history} explorer={config.explorer} />
@@ -302,11 +306,11 @@ export function TradeTerminal({
             <table className="w-full min-w-[820px] text-sm">
               <thead>
                 <tr className="text-left text-mute">
-                  {['Coin', 'Size', 'Value', 'Entry', 'Mark', 'P&L', 'Breach', 'Pass', 'TP/SL', ''].map((h) => <th key={h} className="px-4 py-2 font-normal">{h}</th>)}
+                  {['Trade', 'Coin', 'Size', 'Value', 'Entry', 'Mark', 'P&L', 'Breach', 'Pass', 'TP/SL', ''].map((h) => <th key={h} className="px-4 py-2 font-normal">{h}</th>)}
                 </tr>
               </thead>
               <tbody>
-                {account.positions.map((p) => {
+                {account.positions.map((p, i) => {
                   const mm = market(p.symbol);
                   const qq = quotes?.[p.symbol];
                   const value = positionValue(p, quotes ?? null);
@@ -314,7 +318,8 @@ export function TradeTerminal({
                   const pnl = value === null || BigInt(p.cost) === 0n ? null : value - BigInt(p.cost);
                   const l = limits(account);
                   return (
-                    <tr key={p.symbol} className="num border-t border-line">
+                    <tr key={`${p.symbol}-${p.qty}-${i}`} className="num border-t border-line">
+                      <td className="px-4 py-2 text-mute">#{i + 1}</td>
                       <td className="px-4 py-2">{p.symbol}</td>
                       <td className="px-4 py-2">{units.toPrecision(5)}</td>
                       <td className="px-4 py-2">{value === null ? 'N/A' : usd(value)}</td>
@@ -324,7 +329,7 @@ export function TradeTerminal({
                       <td className="px-4 py-2">{px(priceForEquity(account, p, quotes ?? null, l.breachEquity))}</td>
                       <td className="px-4 py-2">{l.passEquity === null ? 'None' : px(priceForEquity(account, p, quotes ?? null, l.passEquity))}</td>
                       <td className="px-4 py-2">{p.tp_e8 || p.sl_e8 ? `${p.tp_e8 ? px(Number(p.tp_e8) / 1e8) : '—'} / ${p.sl_e8 ? px(Number(p.sl_e8) / 1e8) : '—'}` : '—'}</td>
-                      <td className="px-4 py-2 text-right"><button className="underline underline-offset-2" disabled={!canTrade || busy || !live} onClick={() => onClose(p.symbol)}>Close</button></td>
+                      <td className="px-4 py-2 text-right"><button className="underline underline-offset-2" disabled={!canTrade || busy || !live} onClick={() => onClose(p.symbol, p.qty)}>Close</button></td>
                     </tr>
                   );
                 })}

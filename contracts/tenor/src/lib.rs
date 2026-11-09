@@ -28,6 +28,8 @@ const FT_STORAGE: NearToken = NearToken::from_micronear(1_250);
 /// Must match `guard::TRADER_METHODS`.
 const TRADER_METHODS: &str = "place_order,close_position,request_payout";
 const GUARD_CODE_KEY: &[u8] = b"GUARD_CODE";
+/// Every order is its own position, so this bounds the gas of pricing an account.
+const MAX_OPEN_POSITIONS: usize = 20;
 
 #[derive(BorshStorageKey)]
 #[near(serializers = [borsh])]
@@ -135,6 +137,8 @@ pub enum EvalAction {
     },
     Close {
         symbol: String,
+        /// Picks one trade by its size. `None` closes the oldest trade in `symbol`.
+        qty: Option<U128>,
     },
     Poke,
 }
@@ -427,9 +431,9 @@ impl Tenor {
         self.fetch_prices(challenge_id, EvalAction::Order { symbol, usdc, tp_e8, sl_e8 })
     }
 
-    pub fn close_position(&mut self, challenge_id: u64, symbol: String) -> Promise {
+    pub fn close_position(&mut self, challenge_id: u64, symbol: String, qty: Option<U128>) -> Promise {
         self.require_active_owner(challenge_id);
-        self.fetch_prices(challenge_id, EvalAction::Close { symbol })
+        self.fetch_prices(challenge_id, EvalAction::Close { symbol, qty })
     }
 
     /// Permissionless keeper entry point. `account` is a challenge id or a Guard account.
@@ -491,8 +495,12 @@ impl Tenor {
                 EvalAction::Order { symbol, usdc, tp_e8, sl_e8 } => {
                     apply_order(&mut c, &symbol, usdc.0, tp_e8, sl_e8, &quotes)
                 }
-                EvalAction::Close { symbol } => {
-                    match c.positions.iter().position(|p| p.symbol == symbol) {
+                EvalAction::Close { symbol, qty } => {
+                    match c
+                        .positions
+                        .iter()
+                        .position(|p| p.symbol == symbol && qty.map_or(true, |q| q.0 == p.qty.0))
+                    {
                         Some(i) => {
                             sell_position(&mut c, i, &quotes);
                             true
@@ -993,9 +1001,8 @@ fn apply_order(
     let m = rule(rules::market(symbol));
     let quote = &quotes[symbol];
     let equity = equity_of(c, quotes);
-    let held = c.positions.iter().find(|p| p.symbol == symbol).map_or(0, |p| {
-        rule(rules::mark_value(p.qty.0, quote, m.decimals))
-    });
+    let held_qty: u128 = c.positions.iter().filter(|p| p.symbol == symbol).map(|p| p.qty.0).sum();
+    let held = rule(rules::mark_value(held_qty, quote, m.decimals));
     let cap = rule(rules::notional_cap(equity, m));
     if usdc > c.cash.0 {
         event("order_rejected", json!({ "id": c.id, "reason": "insufficient_cash" }));
@@ -1005,23 +1012,19 @@ fn apply_order(
         event("order_rejected", json!({ "id": c.id, "reason": "notional_cap", "cap": U128(cap) }));
         return false;
     }
+    if c.positions.len() >= MAX_OPEN_POSITIONS {
+        event("order_rejected", json!({ "id": c.id, "reason": "too_many_positions" }));
+        return false;
+    }
     let (qty, _fee) = rule(rules::fill_buy(usdc, quote, m.decimals));
     c.cash = U128(c.cash.0 - usdc);
-    match c.positions.iter_mut().find(|p| p.symbol == symbol) {
-        Some(p) => {
-            p.qty = U128(p.qty.0 + qty);
-            p.cost = U128(p.cost.0 + usdc);
-            p.tp_e8 = tp_e8.or(p.tp_e8);
-            p.sl_e8 = sl_e8.or(p.sl_e8);
-        }
-        None => c.positions.push(PaperPosition {
-            symbol: symbol.to_string(),
-            qty: U128(qty),
-            cost: U128(usdc),
-            tp_e8,
-            sl_e8,
-        }),
-    }
+    c.positions.push(PaperPosition {
+        symbol: symbol.to_string(),
+        qty: U128(qty),
+        cost: U128(usdc),
+        tp_e8,
+        sl_e8,
+    });
     event("eval_bought", json!({ "id": c.id, "symbol": symbol, "usdc": U128(usdc), "qty": U128(qty) }));
     true
 }

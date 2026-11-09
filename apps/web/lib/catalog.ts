@@ -30,6 +30,7 @@ export function localCatalog(): CatalogEntry[] {
 }
 
 export const productName = (id: string) => {
+  if (id === 'demo') return 'Free demo';
   const [plan, steps] = id.split('-');
   return `${steps}-Step ${plan[0].toUpperCase()}${plan.slice(1)}`;
 };

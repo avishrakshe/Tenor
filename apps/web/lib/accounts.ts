@@ -1,4 +1,5 @@
 import { market, parseProduct, ruleset, evaluate, markValue, type Quote } from '@tenor/rules';
+import { productName } from './catalog';
 import { view, type Challenge, type Funded, type GuardState, type Position } from './chain';
 
 export type AccountRow = {
@@ -37,7 +38,7 @@ export async function readAccounts(rpc: string, tenor: string, owner: string): P
       return {
         key: `c${c.id}`,
         href: `/trade/${c.id}`,
-        title: `#${c.id} ${c.product}`,
+        title: `#${c.id} ${productName(c.product)}`,
         status: c.status,
         funded: false,
         initial: BigInt(c.initial_balance),

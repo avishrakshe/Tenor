@@ -38,6 +38,8 @@ const VENUE_STORAGE: NearToken = NearToken::from_millinear(100);
 const LOCK_TTL_NS: u64 = 300 * 1_000_000_000;
 const REFRESH_INTERVAL_NS: u64 = 60 * 1_000_000_000;
 const MAX_APPROVED_RECIPIENTS: usize = 8;
+/// Every order is its own position, so this bounds the gas of pricing an account.
+const MAX_OPEN_POSITIONS: usize = 20;
 /// Orders may not fill worse than this against the oracle, whatever the trader asks for. This
 /// stops a trader routing capital through a pool they control at a terrible price.
 const MAX_SLIPPAGE_BPS: u128 = 100;
@@ -114,6 +116,8 @@ pub enum Action {
     Close {
         symbol: Option<String>,
         end_account: bool,
+        /// Picks one trade by its size. `None` closes the oldest matching trade.
+        qty: Option<U128>,
     },
     Poke,
 }
@@ -318,14 +322,21 @@ impl Guard {
         })
     }
 
-    /// Sells one position, or the next open position when `symbol` is `None`. With
-    /// `end_account` the account closes for good once flat and the capital goes back to `tenor`.
-    pub fn close_position(&mut self, symbol: Option<String>, end_account: Option<bool>) -> Promise {
+    /// Sells one trade: the one of size `qty` if given, otherwise the oldest in `symbol`, or the
+    /// oldest overall. With `end_account` everything is sold, the account closes for good and the
+    /// capital goes back to `tenor`.
+    pub fn close_position(
+        &mut self,
+        symbol: Option<String>,
+        end_account: Option<bool>,
+        qty: Option<U128>,
+    ) -> Promise {
         self.require_trader();
         require!(self.status == GuardStatus::Active, "Account is not active");
         self.start(Action::Close {
             symbol,
             end_account: end_account.unwrap_or(false),
+            qty,
         })
     }
 
@@ -446,7 +457,7 @@ impl Guard {
             });
             if let Some(p) = hit.cloned() {
                 event("trigger_hit", json!({ "symbol": p.symbol }));
-                self.swap_sell(&p, &quotes);
+                self.swap_sell(&p.symbol, p.qty.0, &quotes);
                 return;
             }
         }
@@ -481,21 +492,22 @@ impl Guard {
             Action::Order { symbol, usdc, min_out, tp_e8, sl_e8 } => {
                 self.execute_order(symbol, usdc.0, min_out.0, tp_e8, sl_e8, equity, &quotes)
             }
-            Action::Close { symbol, end_account } => {
+            Action::Close { symbol, end_account, qty } => {
                 if end_account {
                     self.status = GuardStatus::Closing;
+                    self.continue_liquidation(&quotes);
+                    return;
                 }
                 let target = self
                     .positions
                     .iter()
-                    .find(|p| symbol.as_ref().map_or(true, |s| *s == p.symbol))
-                    .cloned();
+                    .find(|p| {
+                        symbol.as_ref().map_or(true, |s| *s == p.symbol)
+                            && qty.map_or(true, |q| q.0 == p.qty.0)
+                    })
+                    .map(|p| (p.symbol.clone(), p.qty.0));
                 match target {
-                    Some(p) => self.swap_sell(&p, &quotes),
-                    None if end_account => {
-                        self.locked_at_ns = None;
-                        let _ = self.settle();
-                    }
+                    Some((symbol, qty)) => self.swap_sell(&symbol, qty, &quotes),
                     None => {
                         self.locked_at_ns = None;
                         event("nothing_to_close", json!({}));
@@ -558,7 +570,22 @@ impl Guard {
             (out_balance.0, in_balance.0)
         };
         self.cash = usdc_balance;
-        self.apply_position(&symbol, qty, if bought { spent.0 } else { 0 }, tp_e8, sl_e8);
+        if bought {
+            let received = qty.saturating_sub(self.held_qty(&symbol));
+            if received > 0 {
+                self.positions.push(Position {
+                    symbol: symbol.clone(),
+                    qty: U128(received),
+                    cost: spent,
+                    tp_e8,
+                    sl_e8,
+                });
+            }
+        } else if let Some(i) = self.positions.iter().position(|p| p.symbol == symbol && p.qty == spent) {
+            self.positions.remove(i);
+        }
+        // The token balance stays the truth, whatever the venue actually filled.
+        self.match_lots_to_balance(&symbol, qty);
         event(
             "filled",
             json!({ "symbol": symbol, "side": if bought { "buy" } else { "sell" }, "cash": U128(self.cash), "qty": U128(qty) }),
@@ -571,7 +598,7 @@ impl Guard {
         self.cash = balances[0].0;
         let symbols: Vec<String> = self.markets.iter().map(|m| m.symbol.clone()).collect();
         for (i, symbol) in symbols.iter().enumerate() {
-            self.apply_position(symbol, balances[i + 1].0, 0, None, None);
+            self.match_lots_to_balance(symbol, balances[i + 1].0);
         }
         event("reconciled", json!({ "cash": U128(self.cash) }));
     }
@@ -799,9 +826,13 @@ impl Guard {
         event("breach", json!({ "reason": reason, "equity": U128(equity) }));
     }
 
+    /// Sells a whole market in one swap, so more trades never means a slower liquidation.
     fn continue_liquidation(&mut self, quotes: &HashMap<String, rules::Quote>) {
-        match self.positions.first().cloned() {
-            Some(p) => self.swap_sell(&p, quotes),
+        match self.positions.first().map(|p| p.symbol.clone()) {
+            Some(symbol) => {
+                let qty = self.held_qty(&symbol);
+                self.swap_sell(&symbol, qty, quotes);
+            }
             None => {
                 self.locked_at_ns = None;
                 let _ = self.settle();
@@ -830,14 +861,17 @@ impl Guard {
     ) {
         let m = rule(rules::market(&symbol));
         let quote = &quotes[&symbol];
-        let held = self.positions.iter().find(|p| p.symbol == symbol).map_or(0, |p| {
-            rule(rules::mark_value(p.qty.0, quote, m.decimals))
-        });
+        let held = rule(rules::mark_value(self.held_qty(&symbol), quote, m.decimals));
         let cap = rule(rules::notional_cap(equity, m));
         if usdc > self.cash || held.saturating_add(usdc) > cap {
             // No panic here: it would revert the lock release and any rollover.
             self.locked_at_ns = None;
             event("order_rejected", json!({ "reason": "notional_cap", "cap": U128(cap), "held": U128(held), "order": U128(usdc) }));
+            return;
+        }
+        if self.positions.len() >= MAX_OPEN_POSITIONS {
+            self.locked_at_ns = None;
+            event("order_rejected", json!({ "reason": "too_many_positions" }));
             return;
         }
         let (fair_out, _) = rule(rules::fill_buy(usdc, quote, m.decimals));
@@ -848,19 +882,19 @@ impl Guard {
         self.swap(&usdc_token, &token, pool, usdc, min_out, symbol, tp_e8, sl_e8);
     }
 
-    fn swap_sell(&mut self, p: &Position, quotes: &HashMap<String, rules::Quote>) {
-        let m = rule(rules::market(&p.symbol));
-        let (fair_out, _) = rule(rules::fill_sell(p.qty.0, &quotes[&p.symbol], m.decimals));
-        let token = self.market_cfg(&p.symbol).unwrap().token.clone();
-        let pool = self.market_cfg(&p.symbol).unwrap().pool_id;
+    fn swap_sell(&mut self, symbol: &str, qty: u128, quotes: &HashMap<String, rules::Quote>) {
+        let m = rule(rules::market(symbol));
+        let (fair_out, _) = rule(rules::fill_sell(qty, &quotes[symbol], m.decimals));
+        let token = self.market_cfg(symbol).unwrap().token.clone();
+        let pool = self.market_cfg(symbol).unwrap().pool_id;
         let usdc_token = self.usdc.clone();
         self.swap(
             &token,
             &usdc_token,
             pool,
-            p.qty.0,
+            qty,
             Self::slippage_floor(fair_out),
-            p.symbol.clone(),
+            symbol.to_string(),
             None,
             None,
         );
@@ -900,34 +934,35 @@ impl Guard {
         ));
     }
 
-    fn apply_position(
-        &mut self,
-        symbol: &str,
-        qty: u128,
-        added_cost: u128,
-        tp_e8: Option<U128>,
-        sl_e8: Option<U128>,
-    ) {
-        match self.positions.iter().position(|p| p.symbol == symbol) {
-            Some(i) if qty == 0 => {
-                self.positions.remove(i);
+    fn held_qty(&self, symbol: &str) -> u128 {
+        self.positions.iter().filter(|p| p.symbol == symbol).map(|p| p.qty.0).sum()
+    }
+
+    /// Makes the trades in a market add up to the tokens actually held. A shortfall comes off
+    /// the newest trades first, and a surplus goes on the oldest.
+    fn match_lots_to_balance(&mut self, symbol: &str, balance: u128) {
+        let held = self.held_qty(symbol);
+        if balance > held {
+            let extra = balance - held;
+            match self.positions.iter_mut().find(|p| p.symbol == symbol) {
+                Some(p) => p.qty = U128(p.qty.0 + extra),
+                None => self.positions.push(Position {
+                    symbol: symbol.to_string(),
+                    qty: U128(extra),
+                    cost: U128(0),
+                    tp_e8: None,
+                    sl_e8: None,
+                }),
             }
-            Some(i) => {
-                let p = &mut self.positions[i];
-                p.qty = U128(qty);
-                p.cost = U128(p.cost.0 + added_cost);
-                p.tp_e8 = tp_e8.or(p.tp_e8);
-                p.sl_e8 = sl_e8.or(p.sl_e8);
-            }
-            None if qty > 0 => self.positions.push(Position {
-                symbol: symbol.to_string(),
-                qty: U128(qty),
-                cost: U128(added_cost),
-                tp_e8,
-                sl_e8,
-            }),
-            None => {}
+            return;
         }
+        let mut excess = held - balance;
+        for p in self.positions.iter_mut().rev().filter(|p| p.symbol == symbol) {
+            let cut = excess.min(p.qty.0);
+            p.qty = U128(p.qty.0 - cut);
+            excess -= cut;
+        }
+        self.positions.retain(|p| p.qty.0 > 0);
     }
 
     fn pay(&mut self, recipient: AccountId, trader: u128, firm: u128, settle_after: bool) -> Promise {

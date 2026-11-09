@@ -135,7 +135,7 @@ fn only_the_trader_key_can_order() {
 fn only_the_trader_key_can_close() {
     let mut g = guard();
     ctx("trader.near");
-    let _ = g.close_position(None, None);
+    let _ = g.close_position(None, None, None);
 }
 
 #[test]
@@ -502,6 +502,95 @@ fn balances_rebuild_the_book_after_a_buy() {
     assert_eq!(s.cash.0, 9_000 * USD);
     assert_eq!(s.positions[0].qty.0, 77);
     assert!(!s.locked);
+}
+
+fn fill(g: &mut Guard, buy: bool, spent: u128, usdc: u128, btc: u128, sl: Option<U128>) {
+    g.locked_at_ns = Some(1);
+    let (token_in, in_balance, out_balance) = if buy {
+        ("usdc.near", usdc, btc)
+    } else {
+        ("btc.near", btc, usdc)
+    };
+    g.on_balances(
+        token_in.parse().unwrap(),
+        "BTC".into(),
+        None,
+        sl,
+        U128(spent),
+        Ok(U128(in_balance)),
+        Ok(U128(out_balance)),
+    );
+}
+
+#[test]
+fn two_buys_in_one_market_stay_separate_trades() {
+    let mut g = guard();
+    fill(&mut g, true, 1_000 * USD, 9_000 * USD, 70, Some(U128(5)));
+    fill(&mut g, true, 500 * USD, 8_500 * USD, 100, None);
+    let s = g.get_state();
+    assert_eq!(s.positions.len(), 2);
+    assert_eq!((s.positions[0].qty.0, s.positions[0].cost.0), (70, 1_000 * USD));
+    assert_eq!((s.positions[1].qty.0, s.positions[1].cost.0), (30, 500 * USD));
+    assert_eq!(s.positions[0].sl_e8, Some(U128(5)));
+    assert_eq!(s.positions[1].sl_e8, None);
+}
+
+#[test]
+fn selling_one_trade_leaves_the_other_untouched() {
+    let mut g = guard();
+    fill(&mut g, true, 1_000 * USD, 9_000 * USD, 70, None);
+    fill(&mut g, true, 500 * USD, 8_500 * USD, 100, None);
+    fill(&mut g, false, 30, 9_000 * USD, 70, None);
+    let s = g.get_state();
+    assert_eq!(s.positions.len(), 1);
+    assert_eq!((s.positions[0].qty.0, s.positions[0].cost.0), (70, 1_000 * USD));
+    assert_eq!(s.cash.0, 9_000 * USD);
+}
+
+#[test]
+fn selling_the_whole_market_clears_every_trade() {
+    let mut g = guard();
+    fill(&mut g, true, 1_000 * USD, 9_000 * USD, 70, None);
+    fill(&mut g, true, 500 * USD, 8_500 * USD, 100, None);
+    fill(&mut g, false, 100, 10_000 * USD, 0, None);
+    assert!(g.get_state().positions.is_empty());
+}
+
+#[test]
+fn the_book_always_adds_up_to_the_token_balance() {
+    let mut g = guard();
+    fill(&mut g, true, 1_000 * USD, 9_000 * USD, 70, None);
+    fill(&mut g, true, 500 * USD, 8_500 * USD, 100, None);
+    g.on_reconciled(vec![U128(8_500 * USD), U128(60)]);
+    let s = g.get_state();
+    assert_eq!(s.positions.len(), 1);
+    assert_eq!(s.positions[0].qty.0, 60);
+    g.on_reconciled(vec![U128(8_500 * USD), U128(65)]);
+    assert_eq!(g.get_state().positions[0].qty.0, 65);
+}
+
+#[test]
+fn closing_a_trade_that_does_not_exist_changes_nothing() {
+    let mut g = guard();
+    hold(&mut g, 5);
+    g.locked_at_ns = Some(1);
+    g.on_prices(Action::Close { symbol: Some("BTC".into()), end_account: false, qty: Some(U128(9)) }, prices(PX));
+    assert!(logged("nothing_to_close"));
+    assert_eq!(g.get_state().positions.len(), 1);
+    assert!(!g.get_state().locked);
+}
+
+#[test]
+fn open_trades_are_capped() {
+    let mut g = guard();
+    for _ in 0..20 {
+        hold(&mut g, 1);
+    }
+    g.locked_at_ns = Some(1);
+    g.on_prices(order(USD), prices(PX));
+    assert!(logged("order_rejected"));
+    assert_eq!(g.get_state().positions.len(), 20);
+    assert!(!g.get_state().locked);
 }
 
 #[test]

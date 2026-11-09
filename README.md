@@ -233,7 +233,8 @@ trader can't route capital through a pool they control at a bad price.
 
 ## Limitations
 
-- Spot, long or flat only. BTC, ETH, SOL and NEAR on testnet.
+- Spot, long or flat only. BTC, ETH, SOL and NEAR on testnet. Every buy is its own trade with its own entry and TP/SL, up to 20 open per account. Position caps and breach checks count all trades in a market together.
+- Funded accounts opened before independent trades were added keep their original behaviour, because a Guard's code is fixed at creation.
 - On mainnet, Rhea only has deep USDC liquidity for NEAR (pool 4512), so real swaps would be NEAR only.
 - With a 60-second price limit, a trader can act on information newer than the oracle. The spread and fee reduce this but don't remove it.
 - Candle charts stream live trades from Coinbase's public feed, for context. Fills use the onchain oracle, so there is no order book, and the two prices can differ slightly.
@@ -247,7 +248,7 @@ trader can't route capital through a pool they control at a bad price.
 ## Tests
 
 - `npm test`: 32 tests, covering the shared vectors against the TypeScript rules and the counterparty policy.
-- `cargo test --workspace`: 107 tests covering the fee table, rule ordering, shared vectors, contract panic paths and failed payout or settlement legs.
+- `cargo test --workspace`: 119 tests covering the fee table, rule ordering, shared vectors, contract panic paths and failed payout or settlement legs.
 - `scripts/build-wasm.sh` then `npm run wasm:optimize`: rebuilds and shrinks `wasm/`. The build needs `RUSTFLAGS='--cfg near'`, which the script sets.
 
 ## Prior work
