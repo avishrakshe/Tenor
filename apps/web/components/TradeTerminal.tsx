@@ -1,11 +1,15 @@
 'use client';
 
-import { MARKETS, bid, ask, market, evaluate, fillBuy, markValue, type Ruleset } from '@tenor/rules';
+import { bid, ask, market, evaluate, fillBuy, markValue, type Ruleset } from '@tenor/rules';
 import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { useLiveTick } from '@/lib/live';
+import { readAccounts, type AccountRow } from '@/lib/accounts';
 import { priceUsd, readQuotes, usd, type LiveQuote, type Position } from '@/lib/chain';
 import { CandleChart } from './Charts';
+import { MarketPicker } from './MarketPicker';
+import { OrderBook } from './OrderBook';
 import { DemoPrices, usePriceKeeper } from './PriceKeeper';
 import { useSession } from './Session';
 import { Notice, StatusBadge, usePoll } from './ui';
@@ -146,11 +150,6 @@ export function TradeTerminal({
     return room < account.cash ? room : account.cash;
   })() : 0n;
 
-  useEffect(() => {
-    if (pct > 0) setAmount((Number(maxSize) / 1e6 * (pct / 100)).toFixed(2));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pct]);
-
   const micro = useMemo(() => {
     const n = Number(amount);
     return Number.isFinite(n) && n > 0 ? BigInt(Math.round(n * 1e6)) : 0n;
@@ -160,19 +159,19 @@ export function TradeTerminal({
   const lim = account ? limits(account) : null;
   const previewEval = account && equity !== null ? evaluate({ phase: account.phase, initial: account.initial, dayStart: account.dayStart, equity }, account.rules) : null;
   const age = q ? Math.max(0, Math.round(Date.now() / 1000 - q.publishTime)) : null;
-  const spreadPct = q ? (Number(ask(q) - bid(q)) / Number(q.priceE8)) * 100 : null;
   const pnlTotal = account && equity !== null ? equity - account.initial : null;
   const live = account?.status === 'Active';
+  const setPercent = (v: number) => {
+    setPct(v);
+    if (v === 0) setAmount('');
+    else setAmount((Number(maxSize) / 1e6 * (v / 100)).toFixed(2));
+  };
 
   return (
     <div className="space-y-2">
       <div className="panel flex items-center gap-1 overflow-x-auto !p-3">
-        <div className="flex shrink-0 gap-1 pr-3">
-          {MARKETS.map((x) => (
-            <button key={x.symbol} onClick={() => setSymbol(x.symbol)} aria-pressed={x.symbol === symbol} className={`num min-h-9 rounded-md px-3 text-sm ${x.symbol === symbol ? 'bg-text text-black' : 'text-mute hover:text-text'}`}>
-              {x.symbol}
-            </button>
-          ))}
+        <div className="shrink-0 pr-3">
+          <MarketPicker symbol={symbol} onSelect={(s) => { setSymbol(s); setAmount(''); setPct(0); }} />
         </div>
         <Cell k="24h change" v={mkt ? `${mkt.changePct >= 0 ? '+' : ''}${mkt.changePct.toFixed(2)}%` : '—'} tone={mkt && mkt.changePct < 0 ? 'text-down' : 'text-up'} />
         <Cell k="Position cap" v={`${Number(m.capBps) / 100}% of equity`} />
@@ -194,96 +193,95 @@ export function TradeTerminal({
       {keeper.problem && <div className="px-1"><Notice tone="error">{keeper.problem} Orders cannot fill until prices are updated.</Notice></div>}
       {demo && <DemoPrices move={move} setMove={setMove} />}
 
-      <div className="grid gap-2 xl:grid-cols-[1fr_240px_330px]">
-        <section className="panel !p-0 overflow-hidden" aria-label="Price chart">
-          <div className="h-[440px]"><CandleChart symbol={symbol} oraclePrice={q ? Number(q.priceE8) / 1e8 : null} /></div>
+      <div className="grid gap-2 xl:grid-cols-[1fr_280px_360px]">
+        <section className="panel h-[480px] !p-0 overflow-hidden" aria-label="Price chart">
+          <CandleChart symbol={symbol} oraclePrice={q ? Number(q.priceE8) / 1e8 : null} />
         </section>
 
-        <section className="panel" aria-label="Oracle fill">
-          <h2 className="text-sm font-semibold">Fill price</h2>
-          <p className="label mt-1">Orders fill against the oracle, not an order book.</p>
-          <div className="mt-4 space-y-1">
-            <div className="flex justify-between rounded-md bg-down/10 px-3 py-2"><span className="label">Ask</span><span className="num text-sm text-down">{q ? priceUsd(ask(q)) : 'N/A'}</span></div>
-            <div className="flex justify-between px-3 py-2"><span className="label">Spread</span><span className="num text-sm">{spreadPct === null ? 'N/A' : `${spreadPct.toFixed(3)}%`}</span></div>
-            <div className="flex justify-between rounded-md bg-up/10 px-3 py-2"><span className="label">Bid</span><span className="num text-sm text-up">{q ? priceUsd(bid(q)) : 'N/A'}</span></div>
-          </div>
-          <div className="mt-4 border-t border-line pt-3">
-            <Row k="Taker fee" v="0.05%" />
-            <Row k="Max price age" v="60s" />
-            <Row k="Status" v={!q ? 'No price' : q.fresh ? 'Fresh' : 'Stale, no fills'} />
-          </div>
-          {previewEval && (
-            <div className="mt-4 border-t border-line pt-3 space-y-3">
-              {previewEval.target && <MiniMeter label="Profit target" bps={previewEval.target.progressBps} tone="bg-up" caption={`${usd(previewEval.target.remaining)} left`} />}
-              <MiniMeter label="Daily loss" bps={previewEval.daily.progressBps} tone="bg-down" caption={`${usd(previewEval.daily.remaining)} left`} />
-              <MiniMeter label="Max drawdown" bps={previewEval.maxDrawdown.progressBps} tone="bg-down" caption={`${usd(previewEval.maxDrawdown.remaining)} left`} />
+        <OrderBook symbol={symbol} oracleAsk={q ? priceUsd(ask(q)) : null} oracleBid={q ? priceUsd(bid(q)) : null} fresh={!!q?.fresh} />
+
+        <section className="panel !p-0 xl:row-span-2" aria-label="Order ticket">
+          <AccountSelect />
+
+          <div className="p-5">
+            <div className="grid grid-cols-2 gap-1 rounded-xl border border-line bg-[#08090a] p-1">
+              <button type="button" aria-pressed={side === 'buy'} onClick={() => setSide('buy')} className={`h-11 rounded-lg text-[15px] font-semibold transition-colors ${side === 'buy' ? 'bg-up/15 text-up' : 'text-mute hover:text-text'}`}>Buy</button>
+              <button type="button" aria-pressed={side === 'sell'} onClick={() => setSide('sell')} className={`h-11 rounded-lg text-[15px] font-semibold transition-colors ${side === 'sell' ? 'bg-down/15 text-down' : 'text-mute hover:text-text'}`}>Sell / Close</button>
             </div>
-          )}
-        </section>
 
-        <section className="panel xl:row-span-2" aria-label="Order ticket">
-          <div className="seg">
-            <button aria-pressed={side === 'buy'} onClick={() => setSide('buy')}>Buy</button>
-            <button aria-pressed={side === 'sell'} onClick={() => setSide('sell')}>Sell / Close</button>
-          </div>
-
-          {side === 'buy' ? (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                onBuy(symbol, String(micro), tpsl ? toE8(tp) : null, tpsl ? toE8(sl) : null);
-                setAmount('');
-                setPct(0);
-              }}
-            >
-              <label className="mt-6 block text-center">
-                <span className="sr-only">Amount in USDC</span>
-                <input className="num w-full bg-transparent text-center text-4xl outline-none placeholder:text-mute" inputMode="decimal" placeholder="0" value={amount} onChange={(e) => { setAmount(e.target.value); setPct(0); }} />
-                <span className="text-sm text-mute">USDC</span>
-              </label>
-              <p className="num mt-1 text-center text-sm text-mute">{preview ? `≈ ${(Number(preview.out) / 10 ** m.decimals).toPrecision(6)} ${symbol}` : `0 ${symbol}`}</p>
-              <div className="mt-4 flex items-center gap-3">
-                <input type="range" min={0} max={100} value={pct} onChange={(e) => setPct(Number(e.target.value))} className="flex-1" aria-label="Percent of maximum size" />
-                <span className="num w-10 text-right text-sm">{pct}%</span>
-                <button type="button" className="num rounded-md border border-line px-2 py-1 text-xs text-mute hover:text-text" onClick={() => { setPct(100); setAmount((Number(maxSize) / 1e6).toFixed(2)); }}>MAX</button>
-              </div>
-              <div className="mt-4">
-                <Row k="Available to trade" v={account ? usd(account.cash) : 'N/A'} />
-                <Row k="Max size" v={account ? usd(maxSize) : 'N/A'} />
-                <Row k="Current position" v={trades.length ? heldLabel : `0 ${symbol}`} />
-              </div>
-              <label className="mt-3 flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-line px-3 text-sm">
-                <input type="checkbox" checked={tpsl} onChange={(e) => setTpsl(e.target.checked)} /> Take Profit / Stop Loss
-              </label>
-              {tpsl && (
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <input className="field num" placeholder="Take profit" aria-label="Take profit price" inputMode="decimal" value={tp} onChange={(e) => setTp(e.target.value)} />
-                  <input className="field num" placeholder="Stop loss" aria-label="Stop loss price" inputMode="decimal" value={sl} onChange={(e) => setSl(e.target.value)} />
+            {side === 'buy' ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  onBuy(symbol, String(micro), tpsl ? toE8(tp) : null, tpsl ? toE8(sl) : null);
+                  setAmount('');
+                  setPct(0);
+                }}
+              >
+                <div className="mt-5 flex justify-between text-sm text-mute">
+                  <label htmlFor="order-size">Size (USD)</label>
+                  <span>Market order</span>
                 </div>
-              )}
-              {gate ?? (
-                <button className="btn mt-4 w-full" disabled={!canTrade || busy || micro === 0n || micro > maxSize || !q?.fresh}>
-                  {busy ? 'Sending…' : q?.fresh ? `Buy ${symbol}` : 'Waiting for a fresh price'}
-                </button>
-              )}
-            </form>
-          ) : (
-            <div className="mt-6">
-              <p className="text-sm text-mute">Tenor is spot only: selling closes a trade. Every buy is its own trade, so use the table below to close a specific one.</p>
-              <div className="mt-4">
-                <Row k="Position" v={trades.length ? heldLabel : 'None'} />
-                <Row k="Value at bid" v={trades.length ? usd(held) : 'N/A'} />
-              </div>
-              {gate ?? <button className="btn mt-4 w-full" disabled={!canTrade || busy || !trades.length || !q?.fresh} onClick={() => onClose(symbol, trades[0].qty)}>{q?.fresh || !trades.length ? `Close ${trades.length > 1 ? 'oldest ' : ''}${symbol}${trades.length > 1 ? ' trade' : ''}` : 'Waiting for a fresh price'}</button>}
-            </div>
-          )}
+                <div className="mt-2 flex h-14 items-center gap-3 rounded-xl border border-line bg-[#08090a] px-4 focus-within:border-mute">
+                  <input id="order-size" className="num min-w-0 flex-1 bg-transparent text-lg outline-none placeholder:text-mute" inputMode="decimal" placeholder="0" value={amount} onChange={(e) => { setAmount(e.target.value); setPct(0); }} />
+                  <span className="text-sm text-mute">USDC</span>
+                </div>
+                <p className="num mt-2 text-xs text-mute">≈ {preview ? (Number(preview.out) / 10 ** m.decimals).toPrecision(6) : '0'} {symbol}</p>
 
-          <div className="mt-5 border-t border-line pt-3">
-            <h3 className="mb-1 text-sm font-semibold">Account summary</h3>
-            <Row k="Equity" v={equity === null ? 'N/A' : usd(equity)} />
-            <Row k="Unrealised + realised P&L" v={pnlTotal === null ? 'N/A' : usd(pnlTotal)} />
-            <Row k="Starting balance" v={account ? usd(account.initial, 0) : 'N/A'} />
-            <Row k="Breach below equity" v={lim ? usd(lim.breachEquity) : 'N/A'} />
+                <input type="range" min={0} max={100} value={pct} onChange={(e) => setPercent(Number(e.target.value))} className="range mt-4 w-full" style={{ '--pct': `${pct}%` } as React.CSSProperties} aria-label="Percent of maximum size" aria-valuetext={`${pct}% of max size`} />
+                <div className="num mt-1 flex justify-between text-xs text-mute">
+                  {[0, 25, 50, 75, 100].map((v) => (
+                    <button key={v} type="button" onClick={() => setPercent(v)} className={`py-1 hover:text-text ${pct === v ? 'text-text' : ''}`}>{v}%</button>
+                  ))}
+                </div>
+
+                <div className="mt-3">
+                  <Row k="Available to trade" v={account ? usd(account.cash) : 'N/A'} />
+                  <Row k="Max size" v={account ? usd(maxSize) : 'N/A'} />
+                  <Row k="Current position" v={trades.length ? heldLabel : `0 ${symbol}`} />
+                  <Row k="Taker fee" v="0.05%" />
+                </div>
+
+                <label className="mt-3 flex min-h-10 cursor-pointer items-center gap-3 text-[15px]">
+                  <input type="checkbox" className="size-4 accent-up" checked={tpsl} onChange={(e) => setTpsl(e.target.checked)} /> Take profit / Stop loss
+                </label>
+                {tpsl && (
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <input className="field num !rounded-xl" placeholder="Take profit" aria-label="Take profit price" inputMode="decimal" value={tp} onChange={(e) => setTp(e.target.value)} />
+                    <input className="field num !rounded-xl" placeholder="Stop loss" aria-label="Stop loss price" inputMode="decimal" value={sl} onChange={(e) => setSl(e.target.value)} />
+                  </div>
+                )}
+                {gate ?? (
+                  <button className="btn mt-4 !min-h-12 w-full !rounded-2xl !bg-up text-[15px]" disabled={!canTrade || busy || micro === 0n || micro > maxSize || !q?.fresh}>
+                    {busy ? 'Sending…' : q?.fresh ? `Buy ${symbol}` : 'Waiting for a fresh price'}
+                  </button>
+                )}
+              </form>
+            ) : (
+              <div className="mt-5">
+                <p className="text-sm text-mute">Tenor is spot only: selling closes a trade. Every buy is its own trade, so use the table below to close a specific one.</p>
+                <div className="mt-4">
+                  <Row k="Position" v={trades.length ? heldLabel : 'None'} />
+                  <Row k="Value at bid" v={trades.length ? usd(held) : 'N/A'} />
+                </div>
+                {gate ?? <button className="btn mt-4 !min-h-12 w-full !rounded-2xl !bg-down text-[15px]" disabled={!canTrade || busy || !trades.length || !q?.fresh} onClick={() => onClose(symbol, trades[0].qty)}>{q?.fresh || !trades.length ? `Close ${trades.length > 1 ? 'oldest ' : ''}${symbol}${trades.length > 1 ? ' trade' : ''}` : 'Waiting for a fresh price'}</button>}
+              </div>
+            )}
+
+            <div className="mt-5 border-t border-line pt-3">
+              <h3 className="mb-1 text-sm font-semibold">Account summary</h3>
+              <Row k="Equity" v={equity === null ? 'N/A' : usd(equity)} />
+              <Row k="Unrealised + realised P&L" v={pnlTotal === null ? 'N/A' : usd(pnlTotal)} />
+              <Row k="Starting balance" v={account ? usd(account.initial, 0) : 'N/A'} />
+              <Row k="Breach below equity" v={lim ? usd(lim.breachEquity) : 'N/A'} />
+            </div>
+            {previewEval && (
+              <div className="mt-4 space-y-3 border-t border-line pt-3">
+                {previewEval.target && <MiniMeter label="Profit target" bps={previewEval.target.progressBps} tone="bg-up" caption={`${usd(previewEval.target.remaining)} left`} />}
+                <MiniMeter label="Daily loss" bps={previewEval.daily.progressBps} tone="bg-down" caption={`${usd(previewEval.daily.remaining)} left`} />
+                <MiniMeter label="Max drawdown" bps={previewEval.maxDrawdown.progressBps} tone="bg-down" caption={`${usd(previewEval.maxDrawdown.remaining)} left`} />
+              </div>
+            )}
           </div>
         </section>
 
@@ -361,7 +359,52 @@ function MiniMeter({ label, bps, tone, caption }: { label: string; bps: bigint; 
   );
 }
 
-type HistoryRow = { hash: string; time: number; method: string; symbol: string | null; usdc: string | null; ok: boolean };
+/** Switches between the trader's accounts. Hidden until they own one. */
+function AccountSelect() {
+  const { config, accountId } = useSession();
+  const pathname = usePathname();
+  const router = useRouter();
+  const [rows, setRows] = useState<AccountRow[]>([]);
+
+  useEffect(() => {
+    if (!accountId || !config.deployed) return;
+    let alive = true;
+    readAccounts(config.rpc, config.stack.tenor, accountId)
+      .then((r) => alive && setRows(r))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [accountId, config.deployed, config.rpc, config.stack.tenor]);
+
+  if (rows.length === 0) return null;
+  const current = rows.find((r) => pathname === r.href);
+  return (
+    <div className="border-b border-line p-5">
+      <label htmlFor="account-select" className="text-sm text-mute">Account</label>
+      <div className="relative mt-2">
+        <select
+          id="account-select"
+          value={current?.href ?? ''}
+          onChange={(e) => router.push(e.target.value)}
+          className="h-12 w-full cursor-pointer appearance-none truncate rounded-xl border border-line bg-[#08090a] pl-4 pr-10 text-[15px] outline-none focus:border-mute"
+        >
+          {!current && <option value="" disabled>Choose an account</option>}
+          {rows.map((r) => (
+            <option key={r.key} value={r.href}>
+              {`${usd(r.initial, 0)} · ${r.title}${r.status === 'Active' ? '' : ` · ${r.status}`}`}
+            </option>
+          ))}
+        </select>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-mute" aria-hidden>
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+type HistoryRow ={ hash: string; time: number; method: string; symbol: string | null; usdc: string | null; ok: boolean };
 
 const ACTION_NAMES: Record<string, string> = { place_order: 'Buy', close_position: 'Close', request_payout: 'Payout', fund: 'Fund' };
 
